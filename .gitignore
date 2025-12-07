@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+dist/
+build/
+.next/
+out/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Database
+*.db
+*.sqlite
+
+# Uploads
+uploads/
+
+# Prisma
+.env
+prisma/migrations/**/migration.sql
+
+# Test coverage
+coverage/
+
+# Build artifacts
+*.tsbuildinfo

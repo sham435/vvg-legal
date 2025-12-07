@@ -1,0 +1,112 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: viral-videos-db
+    environment:
+      POSTGRES_USER: viraluser
+      POSTGRES_PASSWORD: viralpass123
+      POSTGRES_DB: viral_videos
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U viraluser" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for BullMQ
+  redis:
+    image: redis:7-alpine
+    container_name: viral-videos-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: viral-videos-backend
+    environment:
+      DATABASE_URL: postgresql://viraluser:viralpass123@postgres:5432/viral_videos
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      NODE_ENV: production
+      PORT: 3000
+    env_file:
+      - ./backend/.env
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend/uploads:/app/uploads
+    command: sh -c "npx prisma migrate deploy && npm run start:prod"
+
+  # Python FastAPI Music Service
+  fastapi:
+    build:
+      context: ./backend/fastapi
+      dockerfile: Dockerfile
+    container_name: viral-videos-fastapi
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    volumes:
+      - ./backend/fastapi:/app
+    environment:
+      - ARTLIST_API_BASE=https://api.artlist.io
+
+
+  # Worker (Queue Processor)
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: viral-videos-worker
+    environment:
+      DATABASE_URL: postgresql://viraluser:viralpass123@postgres:5432/viral_videos
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      NODE_ENV: production
+    env_file:
+      - ./backend/.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend/uploads:/app/uploads
+    command: npm run start:prod
+
+  # Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: viral-videos-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:

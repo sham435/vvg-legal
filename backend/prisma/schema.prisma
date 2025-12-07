@@ -1,0 +1,175 @@
+// Prisma Schema for Viral Video Automation System
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Trending topics fetched from news APIs
+model TrendingTopic {
+  id          String   @id @default(uuid())
+  title       String
+  description String?
+  source      String   // newsapi, reddit, twitter
+  url         String?
+  score       Int      @default(0) // Viral potential score
+  category    String?
+  fetchedAt   DateTime @default(now())
+  used        Boolean  @default(false)
+  videos      Video[]
+  
+  @@index([fetchedAt, score])
+  @@index([used])
+}
+
+// Generated videos
+model Video {
+  id                String          @id @default(uuid())
+  title             String
+  description       String?
+  script            String          @db.Text
+  scenes            Json?           // Scene breakdown
+  status            VideoStatus     @default(PENDING)
+  
+  // Generation details
+  trendingTopicId   String?
+  trendingTopic     TrendingTopic?  @relation(fields: [trendingTopicId], references: [id])
+  videoEngine       String?         // luma, runway, pika
+  videoUrl          String?         // Generated video URL
+  thumbnailUrl      String?
+  duration          Int?            // seconds
+  
+  // Storage
+  localPath         String?
+  s3Url             String?
+  
+  // Metadata
+  hashtags          String[]
+  tags              String[]
+  
+  // Timestamps
+  generatedAt       DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  
+  // Relations
+  publishLogs       PublishLog[]
+  
+  @@index([status, createdAt])
+}
+
+enum VideoStatus {
+  PENDING
+  GENERATING_SCRIPT
+  GENERATING_VIDEO
+  GENERATING_THUMBNAIL
+  READY
+  APPROVED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+}
+
+// Upload logs for each platform
+model PublishLog {
+  id              String          @id @default(uuid())
+  videoId         String
+  video           Video           @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  
+  platform        Platform
+  status          PublishStatus   @default(PENDING)
+  
+  // Platform-specific IDs
+  platformVideoId String?         // YouTube video ID, TikTok video ID, etc.
+  platformUrl     String?
+  
+  // Metadata
+  views           Int             @default(0)
+  likes           Int             @default(0)
+  comments        Int             @default(0)
+  shares          Int             @default(0)
+  
+  // Error handling
+  errorMessage    String?
+  retryCount      Int             @default(0)
+  
+  // Timestamps
+  publishedAt     DateTime?
+  lastSyncedAt    DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  @@index([videoId, platform])
+  @@index([status])
+  @@unique([videoId, platform])
+}
+
+enum Platform {
+  YOUTUBE
+  TIKTOK
+  INSTAGRAM
+}
+
+enum PublishStatus {
+  PENDING
+  UPLOADING
+  PUBLISHED
+  FAILED
+}
+
+// System settings and configuration
+model Settings {
+  id                    String   @id @default(uuid())
+  key                   String   @unique
+  value                 Json
+  updatedAt             DateTime @updatedAt
+  
+  @@index([key])
+}
+
+// Analytics data aggregated from platforms
+model Analytics {
+  id              String   @id @default(uuid())
+  date            DateTime @db.Date
+  platform        Platform
+  
+  // Metrics
+  totalViews      Int      @default(0)
+  totalLikes      Int      @default(0)
+  totalComments   Int      @default(0)
+  totalShares     Int      @default(0)
+  
+  // Revenue (estimated)
+  estimatedRevenue Float   @default(0)
+  
+  // Metadata
+  videosPublished Int      @default(0)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@unique([date, platform])
+  @@index([date])
+}
+
+// Admin users for dashboard access
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  passwordHash  String
+  name          String?
+  role          UserRole @default(ADMIN)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@index([email])
+}
+
+enum UserRole {
+  ADMIN
+  VIEWER
+}
