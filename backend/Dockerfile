@@ -3,6 +3,8 @@ FROM node:20-bullseye AS builder
 
 RUN apt-get update && apt-get install -y openssl libssl-dev libssl1.1
 
+WORKDIR /app
+
 # Copy package files
 COPY package*.json ./
 COPY prisma ./prisma/
