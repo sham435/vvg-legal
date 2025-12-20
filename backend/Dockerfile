@@ -8,7 +8,7 @@ COPY package*.json ./
 COPY prisma ./prisma/
 
 # Install dependencies
-# No apk needed on Debian
+RUN npm ci
 
 # Copy source code
 COPY . .
