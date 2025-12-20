@@ -16,7 +16,9 @@ RUN npm ci
 COPY . .
 
 # Generate Prisma client
-RUN echo 'DATABASE_URL="postgresql://johndoe:randompassword@localhost:5432/mydb?schema=public"' > .env && npm run prisma:generate
+# Use sed to replace env("DATABASE_URL") with a dummy string for generation only
+RUN sed -i 's/env("DATABASE_URL")/"postgresql:\/\/johndoe:randompassword@localhost:5432\/mydb?schema=public"/' prisma/schema.prisma && \
+    npm run prisma:generate
 
 # Build application
 RUN npm run build
