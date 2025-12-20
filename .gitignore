@@ -55,7 +55,7 @@ backend/svd/checkpoints/
 backend/svd/.pt2/
 .venv/
 env/
-modules/
+
 **/__pycache__/
 
 # Logs & Outputs
