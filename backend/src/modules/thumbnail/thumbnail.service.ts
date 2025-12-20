@@ -1,8 +1,8 @@
-import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { HttpService } from '@nestjs/axios';
-import { firstValueFrom } from 'rxjs';
-import { AxiosResponse } from 'axios';
+import { Injectable, Logger, HttpException, HttpStatus } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { HttpService } from "@nestjs/axios";
+import { firstValueFrom } from "rxjs";
+import { AxiosResponse } from "axios";
 
 export interface ThumbnailOptions {
   aspectRatio?: string;
@@ -29,17 +29,17 @@ export class ThumbnailService {
     private readonly httpService: HttpService,
   ) {
     this.midjourneyApiUrl = this.configService.get<string>(
-      'MIDJOURNEY_API_URL',
-      'http://midjourney-api-public:4000',
+      "MIDJOURNEY_API_URL",
+      "http://midjourney-api-public:4000",
     );
     this.midjourneyApiKey = this.configService.get<string>(
-      'MIDJOURNEY_API_KEY',
-      '',
+      "MIDJOURNEY_API_KEY",
+      "",
     );
 
     if (!this.midjourneyApiUrl || !this.midjourneyApiKey) {
       this.logger.warn(
-        'Midjourney API URL or KEY not configured. Thumbnail generation will fail.',
+        "Midjourney API URL or KEY not configured. Thumbnail generation will fail.",
       );
     }
   }
@@ -55,37 +55,33 @@ export class ThumbnailService {
 
     this.logger.log(
       `Generating thumbnail: "${prompt.substring(0, 50)}..." ` +
-      `(aspect: ${options.aspectRatio || '16:9'}, force official: ${options.forceOfficial || false})`,
+        `(aspect: ${options.aspectRatio || "16:9"}, force official: ${options.forceOfficial || false})`,
     );
 
     try {
       const payload = {
         prompt,
-        aspectRatio: options.aspectRatio || '16:9', // Default to YouTube aspect ratio
+        aspectRatio: options.aspectRatio || "16:9", // Default to YouTube aspect ratio
         stylize: options.stylize,
         quality: options.quality,
         isPublicRequest: options.forceOfficial || false, // Internal request unless forced
       };
 
       const response: AxiosResponse = await firstValueFrom(
-        this.httpService.post(
-          `${this.midjourneyApiUrl}/generate`,
-          payload,
-          {
-            headers: {
-              'Authorization': `Bearer ${this.midjourneyApiKey}`,
-              'Content-Type': 'application/json',
-            },
-            timeout: this.timeout,
+        this.httpService.post(`${this.midjourneyApiUrl}/generate`, payload, {
+          headers: {
+            Authorization: `Bearer ${this.midjourneyApiKey}`,
+            "Content-Type": "application/json",
           },
-        ),
+          timeout: this.timeout,
+        }),
       );
 
       const generationTime = Date.now() - startTime;
 
       this.logger.log(
         `Thumbnail generated successfully in ${generationTime}ms ` +
-        `via ${response.data.metadata?.provider || 'unknown'} provider`,
+          `via ${response.data.metadata?.provider || "unknown"} provider`,
       );
 
       return {
@@ -106,7 +102,7 @@ export class ThumbnailService {
 
       throw new HttpException(
         {
-          code: 'THUMBNAIL_GENERATION_FAILED',
+          code: "THUMBNAIL_GENERATION_FAILED",
           message: `Failed to generate thumbnail: ${error.response?.data?.message || error.message}`,
           details: error.response?.data,
         },
@@ -125,15 +121,12 @@ export class ThumbnailService {
 
     try {
       const response: AxiosResponse = await firstValueFrom(
-        this.httpService.get(
-          `${this.midjourneyApiUrl}/status/${jobId}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${this.midjourneyApiKey}`,
-            },
-            timeout: 10000,
+        this.httpService.get(`${this.midjourneyApiUrl}/status/${jobId}`, {
+          headers: {
+            Authorization: `Bearer ${this.midjourneyApiKey}`,
           },
-        ),
+          timeout: 10000,
+        }),
       );
 
       return {
@@ -150,8 +143,8 @@ export class ThumbnailService {
 
       throw new HttpException(
         {
-          code: 'STATUS_CHECK_FAILED',
-          message: 'Failed to retrieve thumbnail job status',
+          code: "STATUS_CHECK_FAILED",
+          message: "Failed to retrieve thumbnail job status",
           details: error.message,
         },
         HttpStatus.NOT_FOUND,
@@ -159,4 +152,3 @@ export class ThumbnailService {
     }
   }
 }
-

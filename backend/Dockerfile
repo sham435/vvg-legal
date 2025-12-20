@@ -1,14 +1,14 @@
 # Multi-stage build for NestJS backend
-FROM node:20-alpine AS builder
+FROM node:20-bullseye AS builder
 
-WORKDIR /app
+RUN apt-get update && apt-get install -y openssl libssl-dev libssl1.1
 
 # Copy package files
 COPY package*.json ./
 COPY prisma ./prisma/
 
 # Install dependencies
-RUN npm ci
+# No apk needed on Debian
 
 # Copy source code
 COPY . .
@@ -20,7 +20,7 @@ RUN npm run prisma:generate
 RUN npm run build
 
 # Production stage
-FROM node:20-alpine
+FROM node:20-bullseye
 
 WORKDIR /app
 

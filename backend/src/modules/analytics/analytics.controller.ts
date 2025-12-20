@@ -1,14 +1,14 @@
-import { Controller, Get, Post } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
-import { AnalyticsService } from './analytics.service';
+import { Controller, Get, Post } from "@nestjs/common";
+import { ApiTags, ApiOperation } from "@nestjs/swagger";
+import { AnalyticsService } from "./analytics.service";
 
-@ApiTags('Analytics')
-@Controller('analytics')
+@ApiTags("Analytics")
+@Controller("analytics")
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
 
-  @Get('dashboard')
-  @ApiOperation({ summary: 'Get dashboard statistics' })
+  @Get("dashboard")
+  @ApiOperation({ summary: "Get dashboard statistics" })
   async getDashboardStats() {
     const stats = await this.analyticsService.getDashboardStats();
     return {
@@ -17,8 +17,8 @@ export class AnalyticsController {
     };
   }
 
-  @Get('by-platform')
-  @ApiOperation({ summary: 'Get analytics by platform' })
+  @Get("by-platform")
+  @ApiOperation({ summary: "Get analytics by platform" })
   async getByPlatform() {
     const analytics = await this.analyticsService.getAnalyticsByPlatform();
     return {
@@ -27,8 +27,8 @@ export class AnalyticsController {
     };
   }
 
-  @Get('recent-videos')
-  @ApiOperation({ summary: 'Get recent videos with performance data' })
+  @Get("recent-videos")
+  @ApiOperation({ summary: "Get recent videos with performance data" })
   async getRecentVideos() {
     const videos = await this.analyticsService.getRecentVideos();
     return {
@@ -37,8 +37,8 @@ export class AnalyticsController {
     };
   }
 
-  @Post('sync')
-  @ApiOperation({ summary: 'Sync analytics from all platforms' })
+  @Post("sync")
+  @ApiOperation({ summary: "Sync analytics from all platforms" })
   async syncAnalytics() {
     const result = await this.analyticsService.syncAllAnalytics();
     return result;

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL Database
   postgres:
@@ -58,6 +56,20 @@ services:
       - ./backend/uploads:/app/uploads
     command: sh -c "npx prisma migrate deploy && npm run start:prod"
 
+  #  # OpenSora2 video generation service
+  #  # opensora2:
+  #  #   image: ghcr.io/hpcaitech/open-sora:latest
+  #  #   container_name: viral-videos-opensora2
+  #  #   ports:
+  #  #     - "8000:8000"
+  #  #   environment:
+  #  #     - PORT=8000
+  #  #   healthcheck:
+  #  #     test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+  #  #     interval: 10s
+  #  #     timeout: 5s
+  #  #     retries: 5
+
   # Python FastAPI Music Service
   fastapi:
     build:
@@ -72,6 +84,19 @@ services:
       - ./backend/fastapi:/app
     environment:
       - ARTLIST_API_BASE=https://api.artlist.io
+
+  #   svd:
+  #     image: mnb3000/runpod-stable-video-diffusion:latest
+  #     container_name: viral-videos-svd
+  #     ports:
+  #       - "8500:8500"
+  #     environment:
+  #       - NVIDIA_VISIBLE_DEVICES=all
+  #     healthcheck:
+  #       test: [ "CMD", "curl", "-f", "http://localhost:8500/health" ]
+  #       interval: 10s
+  #       timeout: 5s
+  #       retries: 5
 
 
   # Worker (Queue Processor)

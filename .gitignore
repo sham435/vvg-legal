@@ -42,3 +42,25 @@ coverage/
 
 # Build artifacts
 *.tsbuildinfo
+
+# AI Models & Weights
+backend/cogvideox/models/
+backend/svd/checkpoints/
+*.safetensors
+*.pth
+*.pt
+*.dylib
+
+# Virtual Environments
+backend/svd/.pt2/
+.venv/
+env/
+modules/
+**/__pycache__/
+
+# Logs & Outputs
+backend/generation_output.json
+backend/generation_retry.json
+backend/generation_retry_2.json
+backend/backend.log
+backend/outputs/

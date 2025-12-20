@@ -1,86 +1,110 @@
-import { Key, AlertCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Save, RefreshCw, Eye, EyeOff, Key } from 'lucide-react';
+import api from '../services/api';
 
-function ApiKeys() {
+export default function ApiKeys() {
+  const [keys, setKeys] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    loadKeys();
+  }, []);
+
+  const loadKeys = async () => {
+    try {
+      setLoading(true);
+      const response = await api.settings.getApiKeys();
+      setKeys(response.data.data || {});
+    } catch (error) {
+      console.error('Failed to load keys:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      // Only send keys that have values and are strictly not masked (if we were editing masked ones)
+      // But here we are just sending the current state. 
+      // Note: If the user didn't edit a masked key, we shouldn't send it back effectively?
+      // Actually the backend just updates what we send. 
+      // If we send "sk-***...", the backend might save that literally if we aren't careful?
+      // The current UI shows masked values. If user saves, we should only send CHANGED values.
+      // For now, let's assume the user edits the field to a NEW value.
+      
+      const payload: Record<string, string> = {};
+      Object.entries(keys).forEach(([k, v]) => {
+          if (!v.includes('***')) {
+              payload[k] = v;
+          }
+      });
+
+      if (Object.keys(payload).length > 0) {
+        await api.settings.updateApiKeys(payload);
+        await loadKeys(); // Reload to get fresh masked values
+        alert('Settings saved successfully!');
+      } else {
+        alert('No changes to save (masked keys are ignored).');
+      }
+
+    } catch (error) {
+      console.error('Failed to save keys:', error);
+      alert('Failed to save settings.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleShow = (key: string) => {
+    setShowKeys(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  if (loading) return <div className="p-8">Loading settings...</div>;
+
   return (
-    <div>
-      <div className="dashboard-header">
-        <h1>API Keys Configuration</h1>
-      </div>
-
-      <div className="card" style={{ marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', gap: '0.75rem', padding: '1rem', background: '#fef3c7', borderRadius: '8px' }}>
-          <AlertCircle size={20} style={{ color: '#f59e0b', flexShrink: 0 }} />
-          <div style={{ fontSize: '0.875rem', color: '#92400e' }}>
-            <strong>Security Note:</strong> API keys should be configured in the backend .env file.
-            This page is for reference and connection testing only. Never expose API keys in the frontend.
-          </div>
-        </div>
-      </div>
-
-      <div className="card">
-        <h2 style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Key size={24} />
-          Required API Keys
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <Key className="w-6 h-6" />
+          API Configuration
         </h2>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+        >
+          {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          Save Changes
+        </button>
+      </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          {[
-            { name: 'NewsAPI', required: true, purpose: 'Fetch trending news' },
-            { name: 'OpenAI', required: true, purpose: 'Generate video scripts' },
-            { name: 'Luma Dream Machine', required: true, purpose: 'Primary video generation' },
-            { name: 'Runway Gen-3', required: false, purpose: 'Fallback video generation' },
-            { name: 'Midjourney/Ideogram', required: false, purpose: 'Thumbnail generation' },
-            { name: 'YouTube Data API', required: true, purpose: 'Upload to YouTube' },
-            { name: 'TikTok API', required: false, purpose: 'Upload to TikTok' },
-            { name: 'Instagram Graph API', required: false, purpose: 'Upload to Instagram' },
-            { name: 'Discord Webhook', required: false, purpose: 'Notifications' },
-          ].map((api) => (
-            <div
-              key={api.name}
-              style={{
-                padding: '1.25rem',
-                background: '#f8fafc',
-                borderRadius: '8px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-              }}
-            >
-              <div>
-                <h3 style={{ marginBottom: '0.25rem' }}>
-                  {api.name}
-                  {api.required && (
-                    <span style={{
-                      marginLeft: '0.5rem',
-                      padding: '0.125rem 0.5rem',
-                      background: '#fee2e2',
-                      color: '#991b1b',
-                      borderRadius: '4px',
-                      fontSize: '0.75rem',
-                      fontWeight: 600,
-                    }}>
-                      REQUIRED
-                    </span>
-                  )}
-                </h3>
-                <p style={{ fontSize: '0.875rem', color: '#64748b' }}>{api.purpose}</p>
-              </div>
-              <button className="btn" style={{ background: '#e5e7eb', color: '#374151' }}>
-                Test Connection
+      <div className="grid gap-6">
+        {Object.entries(keys).map(([key, value]) => (
+          <div key={key} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+            <label className="block text-sm font-medium text-gray-700 mb-2">{key}</label>
+            <div className="relative">
+              <input
+                type={showKeys[key] ? "text" : "password"}
+                value={value}
+                onChange={(e) => setKeys(prev => ({ ...prev, [key]: e.target.value }))}
+                className="w-full pl-4 pr-10 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none font-mono text-sm"
+              />
+              <button
+                onClick={() => toggleShow(key)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                {showKeys[key] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
-          ))}
-        </div>
-
-        <div style={{ marginTop: '2rem', padding: '1rem', background: '#eff6ff', borderRadius: '8px' }}>
-          <p style={{ fontSize: '0.875rem', color: '#1e40af' }}>
-            📝 <strong>Setup Guide:</strong> Edit <code>/backend/.env</code> file with your API keys.
-            Use the <code>.env.example</code> as a template.
-          </p>
-        </div>
+          </div>
+        ))}
+        {Object.keys(keys).length === 0 && (
+            <div className="text-gray-500 text-center py-10">No API Keys found in .env</div>
+        )}
       </div>
     </div>
   );
 }
-
-export default ApiKeys;

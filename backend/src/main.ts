@@ -1,7 +1,8 @@
-import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
-import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
-import { AppModule } from './app.module';
+import { NestFactory } from "@nestjs/core";
+import { ValidationPipe } from "@nestjs/common";
+import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
+import { AppModule } from "./app.module";
+import { SpaFallbackFilter } from "./common/filters/spa-fallback.filter";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -15,21 +16,28 @@ async function bootstrap() {
     }),
   );
 
-  // CORS configuration
+  //  // Global API Prefix
+  app.setGlobalPrefix("api"); // All routes start with /api
+
+  // Enable CORS
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: ["http://localhost:5173", "http://localhost:3000"],
+    methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
     credentials: true,
   });
 
-  // Swagger API documentation
+  // SPA Fallback for non-API routes
+  app.useGlobalFilters(new SpaFallbackFilter());
+
+  // Swagger Setup
   const config = new DocumentBuilder()
-    .setTitle('Viral Video Automation API')
-    .setDescription('API for automated viral video generation and publishing')
-    .setVersion('1.0')
+    .setTitle("Viral Video Automation API")
+    .setDescription("API for automated viral video generation and publishing")
+    .setVersion("1.0")
     .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  SwaggerModule.setup("api/docs", app, document);
 
   const port = process.env.PORT || 3000;
   await app.listen(port);

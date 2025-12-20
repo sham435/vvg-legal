@@ -1,14 +1,14 @@
-import { Controller, Get, Post, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
-import { TrendsService } from './trends.service';
+import { Controller, Get, Post, Query } from "@nestjs/common";
+import { ApiTags, ApiOperation } from "@nestjs/swagger";
+import { TrendsService } from "./trends.service";
 
-@ApiTags('Trends')
-@Controller('trends')
+@ApiTags("Trends")
+@Controller("trends")
 export class TrendsController {
   constructor(private readonly trendsService: TrendsService) {}
 
-  @Post('fetch')
-  @ApiOperation({ summary: 'Manually fetch trending topics' })
+  @Post("fetch")
+  @ApiOperation({ summary: "Manually fetch trending topics" })
   async fetchTrends() {
     const count = await this.trendsService.saveTrendingTopics();
     return {
@@ -19,14 +19,14 @@ export class TrendsController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get all trending topics' })
+  @ApiOperation({ summary: "Get all trending topics" })
   async getTrends(
-    @Query('limit') limit?: string,
-    @Query('includeUsed') includeUsed?: string,
+    @Query("limit") limit?: string,
+    @Query("includeUsed") includeUsed?: string,
   ) {
     const topics = await this.trendsService.getAllTopics(
       limit ? parseInt(limit) : 20,
-      includeUsed === 'true',
+      includeUsed === "true",
     );
     return {
       success: true,
@@ -34,8 +34,8 @@ export class TrendsController {
     };
   }
 
-  @Get('best')
-  @ApiOperation({ summary: 'Get best unused topic' })
+  @Get("best")
+  @ApiOperation({ summary: "Get best unused topic" })
   async getBestTopic() {
     const topic = await this.trendsService.getBestUnusedTopic();
     return {

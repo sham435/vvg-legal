@@ -1,17 +1,20 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
-import { NewsService, Article } from '../news/news.service';
+import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import axios from "axios";
+import { NewsService, Article } from "../news/news.service";
 
 @Injectable()
 export class ScriptService {
   private readonly logger = new Logger(ScriptService.name);
   private readonly openAiKey: string;
 
-  constructor(private readonly config: ConfigService, private readonly newsService: NewsService) {
-    this.openAiKey = this.config.get<string>('OPENAI_API_KEY');
+  constructor(
+    private readonly config: ConfigService,
+    private readonly newsService: NewsService,
+  ) {
+    this.openAiKey = this.config.get<string>("OPENAI_API_KEY");
     if (!this.openAiKey) {
-      throw new Error('OPENAI_API_KEY not configured');
+      throw new Error("OPENAI_API_KEY not configured");
     }
   }
 
@@ -20,27 +23,33 @@ export class ScriptService {
    * The script is a short paragraph (~30‑60 words) suitable for feeding into a video generation model.
    */
   async generateScriptFromArticle(article: Article): Promise<string> {
-    const prompt = `Write a short, engaging video script (30-60 words) based on the following news article. Include a hook, the main point, and a call‑to‑action.\n\nTitle: ${article.title}\nDescription: ${article.description}\nContent: ${article.content ?? ''}`;
+    const prompt = `Write a short, engaging video script (30-60 words) based on the following news article. Include a hook, the main point, and a call‑to‑action.\n\nTitle: ${article.title}\nDescription: ${article.description}\nContent: ${article.content ?? ""}`;
     try {
       const response = await axios.post(
-        'https://api.openai.com/v1/chat/completions',
+        "https://api.openai.com/v1/chat/completions",
         {
-          model: 'gpt-3.5-turbo',
-          messages: [{ role: 'user', content: prompt }],
+          model: "gpt-3.5-turbo",
+          messages: [{ role: "user", content: prompt }],
           temperature: 0.7,
         },
         {
           headers: {
             Authorization: `Bearer ${this.openAiKey}`,
-            'Content-Type': 'application/json',
+            "Content-Type": "application/json",
           },
         },
       );
       const result = response.data?.choices?.[0]?.message?.content?.trim();
-      return result || '';
+      return result || "";
     } catch (error) {
-      this.logger.error('Failed to generate script via OpenAI', error);
-      throw error;
+      this.logger.warn(
+        "Failed to generate script via OpenAI (likely rate limit). Using fallback script.",
+        error.message,
+      );
+      // Fallback: Create a simple script from title and description
+      const safeDescription =
+        article.description || "Check out this breaking story.";
+      return `Here is the latest update: ${article.title}. ${safeDescription} Stay tuned for more coverage.`;
     }
   }
 }

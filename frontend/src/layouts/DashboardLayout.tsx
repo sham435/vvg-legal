@@ -1,5 +1,5 @@
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Video, TrendingUp, Clock, Key, BarChart3 } from 'lucide-react';
+import { BarChart3, Key } from 'lucide-react';
 import './DashboardLayout.css';
 
 function DashboardLayout() {
@@ -7,18 +7,15 @@ function DashboardLayout() {
 
   const navItems = [
     { path: '/dashboard', label: 'Dashboard', icon: BarChart3 },
-    { path: '/trending', label: 'Trending', icon: TrendingUp },
-    { path: '/videos', label: 'Videos', icon: Video },
-    { path: '/scheduler', label: 'Scheduler', icon: Clock },
     { path: '/api-keys', label: 'API Keys', icon: Key },
     { path: '/analytics', label: 'Analytics', icon: BarChart3 },
+    { path: '/marketing', label: 'Marketing', icon: BarChart3 },
   ];
 
   return (
     <div className="dashboard-layout">
       <aside className="sidebar">
         <div className="sidebar-header">
-          <Video size={32} />
           <h1>Viral Video AI</h1>
         </div>
 

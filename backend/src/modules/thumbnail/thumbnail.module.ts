@@ -1,8 +1,8 @@
-import { Module } from '@nestjs/common';
-import { HttpModule } from '@nestjs/axios';
-import { ConfigModule } from '@nestjs/config';
-import { ThumbnailService } from './thumbnail.service';
-import { ThumbnailController } from './thumbnail.controller';
+import { Module } from "@nestjs/common";
+import { HttpModule } from "@nestjs/axios";
+import { ConfigModule } from "@nestjs/config";
+import { ThumbnailService } from "./thumbnail.service";
+import { ThumbnailController } from "./thumbnail.controller";
 
 @Module({
   imports: [
@@ -17,4 +17,3 @@ import { ThumbnailController } from './thumbnail.controller';
   exports: [ThumbnailService],
 })
 export class ThumbnailModule {}
-

@@ -1,6 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
+import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import axios from "axios";
 
 @Injectable()
 export class NotificationsService {
@@ -8,15 +8,22 @@ export class NotificationsService {
   private webhookUrl: string;
 
   constructor(private readonly config: ConfigService) {
-    this.webhookUrl = this.config.get<string>('DISCORD_WEBHOOK_URL');
+    this.webhookUrl = this.config.get<string>("DISCORD_WEBHOOK_URL");
   }
 
   /**
    * Send Discord webhook notification
    */
-  private async sendDiscordNotification(message: string, color: number = 5814783) {
-    if (!this.webhookUrl || this.webhookUrl.includes('your_discord_webhook_url') || !this.webhookUrl.startsWith('http')) {
-      this.logger.warn('Discord webhook not configured or invalid');
+  private async sendDiscordNotification(
+    message: string,
+    color: number = 5814783,
+  ) {
+    if (
+      !this.webhookUrl ||
+      this.webhookUrl.includes("your_discord_webhook_url") ||
+      !this.webhookUrl.startsWith("http")
+    ) {
+      this.logger.warn("Discord webhook not configured or invalid");
       return;
     }
 
@@ -31,7 +38,7 @@ export class NotificationsService {
         ],
       });
     } catch (error) {
-      this.logger.error('Failed to send Discord notification', error);
+      this.logger.error("Failed to send Discord notification", error);
     }
   }
 
@@ -49,9 +56,9 @@ export class NotificationsService {
    */
   async sendVideoPublishedNotification(videoId: string, platforms: any) {
     const platformList = Object.entries(platforms)
-      .filter(([_, status]) => status === 'success')
+      .filter(([_, status]) => status === "success")
       .map(([platform]) => platform)
-      .join(', ');
+      .join(", ");
 
     const message = `🚀 **Video Published**\n\nID: ${videoId}\nPlatforms: ${platformList}`;
     await this.sendDiscordNotification(message, 3447003); // Blue
@@ -76,13 +83,14 @@ export class NotificationsService {
     totalViews: number;
     estimatedRevenue: number;
   }) {
-    const message = `📊 **Daily Summary**\n\n` +
+    const message =
+      `📊 **Daily Summary**\n\n` +
       `Videos Generated: ${stats.videosGenerated}\n` +
       `Videos Published: ${stats.videosPublished}\n` +
       `Total Views: ${stats.totalViews.toLocaleString()}\n` +
       `Estimated Revenue: $${stats.estimatedRevenue.toFixed(2)}`;
 
     await this.sendDiscordNotification(message, 16776960); // Gold
-    this.logger.log('Daily summary sent');
+    this.logger.log("Daily summary sent");
   }
 }

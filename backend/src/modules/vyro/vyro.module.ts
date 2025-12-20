@@ -1,5 +1,5 @@
-import { Module } from '@nestjs/common';
-import { VyroService } from './vyro.service';
+import { Module } from "@nestjs/common";
+import { VyroService } from "./vyro.service";
 
 @Module({
   providers: [VyroService],

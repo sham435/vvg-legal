@@ -1,7 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import axios from 'axios';
-import { PrismaService } from '../../common/prisma/prisma.service';
+import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import axios from "axios";
+import { PrismaService } from "../../common/prisma/prisma.service";
 
 interface TrendingNewsItem {
   title: string;
@@ -25,15 +25,15 @@ export class TrendsService {
    */
   async fetchFromNewsAPI(): Promise<TrendingNewsItem[]> {
     try {
-      const apiKey = this.config.get<string>('NEWS_API_KEY');
+      const apiKey = this.config.get<string>("NEWS_API_KEY");
       if (!apiKey) {
-        this.logger.warn('NEWS_API_KEY not configured');
+        this.logger.warn("NEWS_API_KEY not configured");
         return [];
       }
 
-      const response = await axios.get('https://newsapi.org/v2/top-headlines', {
+      const response = await axios.get("https://newsapi.org/v2/top-headlines", {
         params: {
-          country: 'us',
+          country: "us",
           pageSize: 10,
           apiKey,
         },
@@ -41,13 +41,13 @@ export class TrendsService {
 
       return response.data.articles.map((article: any) => ({
         title: article.title,
-        description: article.description || '',
-        source: 'newsapi',
+        description: article.description || "",
+        source: "newsapi",
         url: article.url,
         publishedAt: article.publishedAt,
       }));
     } catch (error) {
-      this.logger.error('Failed to fetch from NewsAPI', error);
+      this.logger.error("Failed to fetch from NewsAPI", error);
       return [];
     }
   }
@@ -60,24 +60,24 @@ export class TrendsService {
 
     // Keywords that increase viral potential
     const viralKeywords = [
-      'shocking',
-      'incident',
-      'dramatic',
-      'breaking',
-      'viral',
-      'trending',
-      'amazing',
-      'unbelievable',
-      'caught on camera',
-      'dubai',
-      'celebrity',
-      'accident',
-      'rescue',
-      'miracle',
+      "shocking",
+      "incident",
+      "dramatic",
+      "breaking",
+      "viral",
+      "trending",
+      "amazing",
+      "unbelievable",
+      "caught on camera",
+      "dubai",
+      "celebrity",
+      "accident",
+      "rescue",
+      "miracle",
     ];
 
     const titleLower = topic.title.toLowerCase();
-    const descLower = (topic.description || '').toLowerCase();
+    const descLower = (topic.description || "").toLowerCase();
 
     viralKeywords.forEach((keyword) => {
       if (titleLower.includes(keyword) || descLower.includes(keyword)) {
@@ -98,7 +98,7 @@ export class TrendsService {
     const topics = await this.fetchFromNewsAPI();
 
     if (topics.length === 0) {
-      this.logger.warn('No trending topics fetched');
+      this.logger.warn("No trending topics fetched");
       return 0;
     }
 
@@ -122,7 +122,7 @@ export class TrendsService {
               source: topic.source,
               url: topic.url,
               score: this.calculateViralScore(topic),
-              category: 'news',
+              category: "news",
             },
           });
           savedCount++;
@@ -144,7 +144,7 @@ export class TrendsService {
       where: {
         used: false,
       },
-      orderBy: [{ score: 'desc' }, { fetchedAt: 'desc' }],
+      orderBy: [{ score: "desc" }, { fetchedAt: "desc" }],
     });
   }
 
@@ -164,7 +164,7 @@ export class TrendsService {
   async getAllTopics(limit = 20, includeUsed = false) {
     return this.prisma.trendingTopic.findMany({
       where: includeUsed ? {} : { used: false },
-      orderBy: [{ score: 'desc' }, { fetchedAt: 'desc' }],
+      orderBy: [{ score: "desc" }, { fetchedAt: "desc" }],
       take: limit,
     });
   }

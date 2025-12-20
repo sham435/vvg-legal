@@ -1,6 +1,6 @@
-import { Controller, Post, Body } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
-import { AuthService } from './auth.service';
+import { Controller, Post, Body } from "@nestjs/common";
+import { ApiTags, ApiOperation } from "@nestjs/swagger";
+import { AuthService } from "./auth.service";
 
 class LoginDto {
   email: string;
@@ -13,13 +13,13 @@ class RegisterDto {
   name: string;
 }
 
-@ApiTags('Auth')
-@Controller('auth')
+@ApiTags("Auth")
+@Controller("auth")
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @Post('login')
-  @ApiOperation({ summary: 'Login to dashboard' })
+  @Post("login")
+  @ApiOperation({ summary: "Login to dashboard" })
   async login(@Body() dto: LoginDto) {
     const result = await this.authService.login(dto.email, dto.password);
     return {
@@ -28,10 +28,14 @@ export class AuthController {
     };
   }
 
-  @Post('register')
-  @ApiOperation({ summary: 'Register new admin user' })
+  @Post("register")
+  @ApiOperation({ summary: "Register new admin user" })
   async register(@Body() dto: RegisterDto) {
-    const user = await this.authService.register(dto.email, dto.password, dto.name);
+    const user = await this.authService.register(
+      dto.email,
+      dto.password,
+      dto.name,
+    );
     return {
       success: true,
       data: user,
