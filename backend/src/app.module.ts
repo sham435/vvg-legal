@@ -42,10 +42,12 @@ import { MarketingModule } from "./modules/marketing/marketing.module";
 
     // BullMQ for queue processing
     BullModule.forRoot({
-      connection: {
-        host: process.env.REDIS_HOST || "localhost",
-        port: parseInt(process.env.REDIS_PORT) || 6379,
-      },
+      connection: process.env.REDIS_URL
+        ? { url: process.env.REDIS_URL }
+        : {
+            host: process.env.REDIS_HOST || "localhost",
+            port: parseInt(process.env.REDIS_PORT) || 6379,
+          },
     }),
 
     // Serve static frontend assets
