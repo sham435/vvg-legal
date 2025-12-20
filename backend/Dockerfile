@@ -15,8 +15,9 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Generate Prisma client
-RUN DATABASE_URL="postgresql://johndoe:randompassword@localhost:5432/mydb?schema=public" npx prisma generate
+# Generate Prisma client - SKIPPED at build time to avoid P1012. 
+# Will be run at runtime start.
+# RUN DATABASE_URL="..." npx prisma generate
 
 # Build application
 RUN npm run build
