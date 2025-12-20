@@ -16,7 +16,7 @@ RUN npm ci
 COPY . .
 
 # Generate Prisma client
-RUN npm run prisma:generate
+RUN DATABASE_URL="postgresql://johndoe:randompassword@localhost:5432/mydb?schema=public" npm run prisma:generate
 
 # Build application
 RUN npm run build
