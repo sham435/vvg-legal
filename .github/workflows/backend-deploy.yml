@@ -41,6 +41,6 @@ jobs:
       - name: Deploy to Railway
         working-directory: ./backend
         run: |
-          npx @railway/cli up --detach
+          npx @railway/cli up --detach --service 2d91a289-318e-440e-9d7f-fb278f87fbb4
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
