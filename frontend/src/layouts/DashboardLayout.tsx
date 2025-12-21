@@ -7,6 +7,7 @@ function DashboardLayout() {
 
   const navItems = [
     { path: '/dashboard', label: 'Dashboard', icon: BarChart3 },
+    { path: '/publish', label: 'Publishing', icon: BarChart3 },
     { path: '/api-keys', label: 'API Keys', icon: Key },
     { path: '/analytics', label: 'Analytics', icon: BarChart3 },
     { path: '/marketing', label: 'Marketing', icon: BarChart3 },
