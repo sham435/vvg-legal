@@ -22,12 +22,11 @@ export class NewsService {
     private readonly http: HttpService,
   ) {
     this.apiKey = this.config.get<string>("NEWS_API_KEY");
-    this.endpoint = this.config.get<string>("NEWS_API_ENDPOINT");
+    this.endpoint =
+      this.config.get<string>("NEWS_API_ENDPOINT") ||
+      "https://newsapi.org/v2/top-headlines";
     if (!this.apiKey) {
       throw new Error("NEWS_API_KEY not configured");
-    }
-    if (!this.endpoint) {
-      throw new Error("NEWS_API_ENDPOINT not configured");
     }
   }
 
