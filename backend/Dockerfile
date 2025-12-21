@@ -31,7 +31,7 @@ WORKDIR /app
 COPY package*.json ./
 COPY prisma ./prisma/
 
-# Install production dependencies only
+RUN apt-get update && apt-get install -y openssl libssl-dev libssl1.1 ffmpeg && apt-get clean && rm -rf /var/lib/apt/lists/*
 RUN npm ci --only=production
 
 # Copy Prisma client and built files from builder

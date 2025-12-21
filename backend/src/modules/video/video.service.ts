@@ -5,6 +5,8 @@ import * as fs from "fs";
 import * as path from "path";
 import { promisify } from "util";
 import { pipeline } from "stream";
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const ffmpeg = require("fluent-ffmpeg");
 import { AiService } from "../ai/ai.service";
 import { VyroService } from "../vyro/vyro.service";
 
@@ -543,4 +545,31 @@ export class VideoService {
       failedScenes,
     };
   }
+
+  async mergeAudio(videoPath: string, audioPath: string): Promise<string> {
+    const outputPath = videoPath.replace(".mp4", "_with_audio.mp4");
+    this.logger.log(`Merging audio: ${videoPath} + ${audioPath} -> ${outputPath}`);
+
+    return new Promise((resolve, reject) => {
+      ffmpeg(videoPath)
+        .input(audioPath)
+        .outputOptions([
+          "-c:v copy", // Copy video stream (no re-encode)
+          "-c:a aac",  // Re-encode audio to AAC
+          "-map 0:v:0", // Use video from first input
+          "-map 1:a:0", // Use audio from second input
+          "-shortest",  // Cut to shortest stream length
+        ])
+        .save(outputPath)
+        .on("end", () => {
+          this.logger.log("Audio merge completed");
+          resolve(outputPath);
+        })
+        .on("error", (err) => {
+          this.logger.error("Audio merge failed", err);
+          reject(err);
+        });
+    });
+  
+}
 }
