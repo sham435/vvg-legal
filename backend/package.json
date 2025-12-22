@@ -20,7 +20,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "pipeline": "ts-node src/cli/run-pipeline.ts"
+    "cron": "node dist/src/cli/run-pipeline.js"
   },
   "dependencies": {
     "@nestjs/axios": "^3.0.1",
