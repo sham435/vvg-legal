@@ -1,0 +1,9 @@
+[build]
+# Use the Dockerfile in the backend folder
+dockerfile = "backend/Dockerfile"
+
+[deploy]
+# Command to start the NestJS server
+startCommand = "npm run start:prod"
+# Healthcheck endpoint
+healthcheckPath = "/health"
