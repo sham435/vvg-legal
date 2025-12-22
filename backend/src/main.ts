@@ -7,6 +7,11 @@ import { SpaFallbackFilter } from "./common/filters/spa-fallback.filter";
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Healthcheck endpoint for Railway
+  app.getHttpAdapter().get('/health', (req, res) => {
+    res.status(200).send('OK');
+  });
+
   // Global validation pipe
   app.useGlobalPipes(
     new ValidationPipe({
