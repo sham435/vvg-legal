@@ -1,38 +1,19 @@
-# -------------------------------------------------
-#  Railway‑compatible Docker image for the VVG app
-# -------------------------------------------------
-# Use an official lightweight Node image (includes npm)
-FROM node:20-alpine AS base
-
-# Set working directory inside the container
+FROM node:20-alpine AS builder
 WORKDIR /app
 
-# -------------------------------------------------
-#  Install dependencies
-# -------------------------------------------------
-# Copy only package files first – this speeds up rebuilds
-COPY package*.json ./
-RUN npm ci --omit=dev   # install only production deps
+# Install backend dependencies (uses package.json & package-lock.json if present)
+COPY backend/package*.json ./
+RUN npm install --omit=dev
 
-# -------------------------------------------------
-#  Build the NestJS backend (and any other build steps)
-# -------------------------------------------------
-COPY . .
-RUN npm run build      # runs the NestJS build (tsc) and any other build scripts
+# Copy backend source code and build
+COPY backend ./
+RUN npm run build
 
-# -------------------------------------------------
-#  Runtime stage – keep it small
-# -------------------------------------------------
+# Runtime stage – minimal image
 FROM node:20-alpine AS runtime
 WORKDIR /app
-
-# Copy the built artefacts from the builder stage
-COPY --from=base /app/dist ./dist
-COPY --from=base /app/node_modules ./node_modules
-COPY --from=base /app/package*.json ./
-
-# Expose the port Railway expects (default 3000)
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package*.json ./
 EXPOSE 3000
-
-# Default command – this is what Railway will execute
 CMD ["npm","run","start:prod"]
