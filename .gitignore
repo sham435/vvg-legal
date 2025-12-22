@@ -1,3 +1,12 @@
+# Environment files (DO NOT COMMIT SECRETS)
+.env
+.env.local
+.env.*.local
+
+# Allow example env file
+!.env.example
+
+
 # Dependencies
 node_modules/
 dist/
@@ -5,10 +14,7 @@ build/
 .next/
 out/
 
-# Environment
-.env
-.env.local
-.env.*.local
+
 
 # IDE
 .vscode/
@@ -34,7 +40,6 @@ npm-debug.log*
 uploads/
 
 # Prisma
-.env
 prisma/migrations/**/migration.sql
 
 # Test coverage
