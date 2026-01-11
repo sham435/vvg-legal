@@ -4,6 +4,7 @@ import { ScriptService } from "../script/script.service";
 import { VyroService } from "../vyro/vyro.service";
 import { VideoService } from "../video/video.service";
 import { MusicService } from "../music/music.service";
+import { PublishService } from "../publish/publish.service";
 import * as fs from "fs";
 import * as path from "path";
 import axios from "axios";
@@ -22,6 +23,7 @@ export class PipelineService {
     private readonly vyroService: VyroService,
     private readonly videoService: VideoService,
     private readonly musicService: MusicService,
+    private readonly publishService: PublishService,
   ) {}
 
   /**
@@ -33,13 +35,18 @@ export class PipelineService {
    * 5. Generate and merge background music.
    * Returns the final video URL and metadata.
    */
-  async runPipeline(): Promise<PipelineResult> {
+  async runPipeline(customArticle?: Article): Promise<PipelineResult> {
     // Step 1: fetch news
-    const articles: Article[] = await this.newsService.fetchTopHeadlines();
-    if (!articles.length) {
-      throw new Error("No news articles fetched");
+    let article: Article;
+    if (customArticle) {
+      article = customArticle;
+    } else {
+      const articles: Article[] = await this.newsService.fetchTopHeadlines();
+      if (!articles.length) {
+        throw new Error("No news articles fetched");
+      }
+      article = articles[0];
     }
-    const article = articles[0];
 
     // Step 2: generate script
     const script = await this.scriptService.generateScriptFromArticle(article);
@@ -106,13 +113,31 @@ export class PipelineService {
     // Step 5: Return result (Video or Article)
     if (videoUrl) {
       this.logger.log(`Generated video URL: ${videoUrl}`);
-      return {
+      
+      const result: PipelineResult = {
         type: "video",
         url: videoUrl,
         title: article.title,
         description: article.description || article.title,
         localPath: localPath,
       };
+
+      // Step 6: Auto-publish if localPath exists
+      if (localPath) {
+          this.logger.log("🚀 Attempting auto-publish to YouTube...");
+          try {
+              await this.publishService.uploadToYouTube(
+                  localPath,
+                  result.title,
+                  result.description
+              );
+              this.logger.log("✅ Auto-published successfully");
+          } catch (pubError) {
+              this.logger.error("Auto-publishing failed", pubError);
+          }
+      }
+
+      return result;
     } else {
       this.logger.log("Returning Article (fallback)");
       return {

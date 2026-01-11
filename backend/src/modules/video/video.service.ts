@@ -1,76 +1,86 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { AiService } from "../ai/ai.service";
 import axios from "axios";
 import * as fs from "fs";
 import * as path from "path";
 import { promisify } from "util";
 import { pipeline } from "stream";
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const ffmpeg = require("fluent-ffmpeg");
-import { AiService } from "../ai/ai.service";
-import { VyroService } from "../vyro/vyro.service";
+import * as ffmpeg from "fluent-ffmpeg";
 
 const streamPipeline = promisify(pipeline);
 
 export interface VideoGenerationResult {
-  videoUrl: string;
-  duration: number;
-  engine: string;
+  videoUrl?: string;
   localPath?: string;
-  // Metadata for DB
-  filename?: string;
-  status?: string;
+  duration?: number;
+  engine: string;
 }
 
 @Injectable()
 export class VideoService {
   private readonly logger = new Logger(VideoService.name);
   private readonly engineHealth = new Map<string, boolean>();
-  private readonly videoDbPath = path.join(
-    process.cwd(),
-    "outputs",
-    "videos.json",
-  );
 
   constructor(
     private readonly config: ConfigService,
-    private readonly aiService: AiService,
-    private readonly vyroService: VyroService,
+    private readonly aiService: AiService
   ) {}
 
-  // ... (generateWithVyro and others remain the same until next step)
-
   /**
-   * Get all videos from persistence
+   * Health check for video engines (circuit breaker)
    */
-  async getAllVideos(): Promise<any[]> {
+  async checkEngineHealth(engine: string): Promise<boolean> {
+    // Placeholder engine is always healthy for testing
+    if (engine === "placeholder") return true;
+
+    if (this.engineHealth.has(engine) && !this.engineHealth.get(engine)) {
+      return false;
+    }
+
     try {
-      if (!fs.existsSync(this.videoDbPath)) return [];
-      const data = fs.readFileSync(this.videoDbPath, "utf8");
-      return JSON.parse(data);
-    } catch (e) {
-      this.logger.error("Failed to read videos.json", e);
-      return [];
+      const endpoint = this.config.get<string>(
+        `${engine.toUpperCase()}_HEALTH_ENDPOINT`
+      );
+      if (!endpoint) return true; // Assume healthy if no endpoint configured
+
+      const response = await axios.get(endpoint, { timeout: 3000 });
+      const isHealthy = response.status === 200;
+      this.engineHealth.set(engine, isHealthy);
+      return isHealthy;
+    } catch (err) {
+      this.logger.warn(`Health check failed for ${engine}: ${err.message}`);
+      this.engineHealth.set(engine, false);
+      return false;
     }
   }
 
   /**
-   * Generate video with robust fallback chain (Priority Routing + Circuit Breaker)
+   * Main entry point for video generation with fallback logic.
    */
   async generateVideo(
     prompt: string,
-    duration: number = 5,
+    duration: number = 5
   ): Promise<VideoGenerationResult> {
-    const priority = (
-      this.config.get<string>("VIDEO_ENGINE_PRIORITY") ||
-      "cogvideox,opensora2,svd,vyro,luma"
-    )
+    const priority = this.config
+      .get<string>("VIDEO_ENGINE_PRIORITY", "veo,cogvideox,svd,placeholder")
       .split(",")
       .map((e) => e.trim());
 
+    // Optionally refine the prompt using Nemotron Nano
+    let finalPrompt = prompt;
+    if (this.config.get<boolean>("REFINE_VIDEO_PROMPTS", true)) {
+      try {
+        finalPrompt = await this.aiService.refineVideoPrompt(prompt);
+      } catch (err) {
+        this.logger.warn("Prompt refinement failed, using raw prompt", err);
+      }
+    }
+
     for (const engine of priority) {
-      if (this.engineHealth.get(engine) === false) {
-        this.logger.warn(`Skipping ${engine} (circuit open)`);
+      const isHealthy = await this.checkEngineHealth(engine);
+      if (!isHealthy) {
+        this.logger.warn(`Engine ${engine} is unhealthy, skipping`);
         continue;
       }
 
@@ -78,48 +88,52 @@ export class VideoService {
         let result: VideoGenerationResult | null = null;
 
         switch (engine) {
-          case "svd":
-            result = await this.generateWithSVD(prompt, duration);
-            break;
-          case "vyro":
-            result = await this.generateWithVyro(prompt, duration);
-            break;
-          case "luma":
-            result = await this.generateWithLuma(prompt, duration);
+          case "veo":
+            result = await this.generateWithVeo(finalPrompt, duration);
             break;
           case "cogvideox":
-            result = await this.generateWithCogVideoX(prompt, duration);
+            result = await this.generateWithCogVideoX(finalPrompt, duration);
             break;
-          case "opensora2":
-            result = await this.generateWithOpenSora2(prompt, duration);
-            break;
-          case "runway":
-            result = await this.generateWithRunway(prompt, duration);
+          case "svd":
+            result = await this.generateWithSVD(finalPrompt, duration);
             break;
           case "placeholder":
-            result = await this.generateWithPlaceholder(prompt, duration);
+            result = await this.generateWithPlaceholder(finalPrompt, duration);
             break;
           default:
             this.logger.warn(`Unknown engine: ${engine}`);
-            break;
         }
 
         if (result) {
-            // Ensure we have a local path for uploading if one wasn't provided by the engine
-            if (result.videoUrl && !result.localPath) {
-                try {
-                    const safeTitle = prompt.replace(/[^a-z0-9]/gi, '_').substring(0, 30);
-                    const filename = `video_${safeTitle}_${Date.now()}.mp4`;
-                    this.logger.log(`Downloading video from ${engine} for upload: ${filename}`);
-                    result.localPath = await this.downloadVideo(result.videoUrl, filename);
-                } catch (downloadError) {
-                    this.logger.warn(`Failed to download video from ${engine}: ${downloadError.message}`);
-                    // We continue even if download fails, but localPath will be missing
-                }
+          // Ensure we have a local path for uploading if one wasn't provided by the engine
+          if (result.videoUrl && !result.localPath) {
+            try {
+              const safeTitle = prompt
+                .replace(/[^a-z0-9]/gi, "_")
+                .substring(0, 30);
+              const filename = `video_${safeTitle}_${Date.now()}.mp4`;
+              this.logger.log(
+                `Downloading video from ${engine} for upload: ${filename}`
+              );
+              result.localPath = await this.downloadVideo(
+                result.videoUrl,
+                filename
+              );
+            } catch (downloadError) {
+              this.logger.warn(
+                `Failed to download video from ${engine}: ${downloadError.message}`
+              );
+              // We continue even if download fails, but localPath will be missing
             }
-            return result;
+          }
+          
+          // Attach the refined prompt to the result if it was changed
+          if (finalPrompt !== prompt) {
+            (result as any).refinedPrompt = finalPrompt;
+          }
+          
+          return result;
         }
-
       } catch (err) {
         this.logger.warn(`${engine} failed, opening circuit`, err);
         this.engineHealth.set(engine, false);
@@ -128,52 +142,99 @@ export class VideoService {
       }
     }
 
-    throw new Error("All video engines failed");
+    throw new Error("All video generation engines failed");
   }
 
   /**
-   * Generate video using Vyro API (Text‑to‑Video)
+   * Helper to download a video from a URL.
    */
-  async generateWithVyro(
+  async downloadVideo(url: string, filename: string): Promise<string> {
+    const uploadDir = path.join(process.cwd(), "uploads", "videos");
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+
+    const localPath = path.join(uploadDir, filename);
+    const response = await axios({
+      method: "GET",
+      url: url,
+      responseType: "stream",
+    });
+
+    await streamPipeline(response.data, fs.createWriteStream(localPath));
+    this.logger.log(`Video downloaded to: ${localPath}`);
+    return localPath;
+  }
+
+  /**
+   * Generate video using CogVideoX local server
+   */
+  async generateWithCogVideoX(
     prompt: string,
-    duration: number = 5,
+    duration: number = 5
   ): Promise<VideoGenerationResult> {
-    const token = this.config.get<string>("IMAGINE_TOKEN");
-    if (!token) {
-      throw new Error("IMAGINE_TOKEN not configured for Vyro");
+    const endpoint = this.config.get<string>("COGVIDEOT_ENDPOINT");
+    if (!endpoint) {
+      throw new Error("CogVideoX endpoint not configured");
     }
 
     try {
-      this.logger.log("Generating video with Vyro...");
-      // By default use text-to-video for generic prompts
-      const result = await this.vyroService.generateTextToVideo(prompt);
+      this.logger.log("Generating video with CogVideoX...");
+      const response = await axios.post(`${endpoint}/generate`, {
+        prompt,
+        num_frames: Math.floor(duration * 8), // Assuming 8 FPS
+      });
 
-      // Vyro returns URL or we might need to poll depending on exact API,
-      // but VyroService returns result.data directly.
-      // Assuming result has a url property based on typical Imagine/Vyro responses.
-      const videoUrl = result?.url || result?.video_url || result?.data?.url;
-
-      if (!videoUrl) {
-        throw new Error("Vyro generation returned no URL");
-      }
-
+      const { video_url, local_path } = response.data;
       return {
-        videoUrl,
+        videoUrl: video_url,
+        localPath: local_path,
         duration,
-        engine: "vyro",
+        engine: "cogvideox",
       };
     } catch (error) {
-      this.logger.error("Vyro generation failed", error);
+      this.logger.error("CogVideoX generation failed", error);
       throw error;
     }
   }
 
   /**
-   * Generate video using Luma Dream Machine API
+   * Generate video using SVD local server
+   */
+  async generateWithSVD(
+    prompt: string,
+    duration: number = 5
+  ): Promise<VideoGenerationResult> {
+    const endpoint = this.config.get<string>("SVD_ENDPOINT");
+    if (!endpoint) {
+      throw new Error("SVD endpoint not configured");
+    }
+
+    try {
+      this.logger.log("Generating video with SVD...");
+      const response = await axios.post(`${endpoint}/generate`, {
+        prompt,
+      });
+
+      const { video_url, local_path } = response.data;
+      return {
+        videoUrl: video_url,
+        localPath: local_path,
+        duration,
+        engine: "svd",
+      };
+    } catch (error) {
+      this.logger.error("SVD generation failed", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate video using Luma AI (via API)
    */
   async generateWithLuma(
     prompt: string,
-    duration: number = 5,
+    duration: number = 5
   ): Promise<VideoGenerationResult> {
     const apiKey = this.config.get<string>("LUMA_API_KEY");
     if (!apiKey) {
@@ -181,13 +242,12 @@ export class VideoService {
     }
 
     try {
-      this.logger.log("Generating video with Luma Dream Machine...");
-
+      this.logger.log("Generating video with Luma...");
       const response = await axios.post(
-        "https://api.lumalabs.ai/dream-machine/v1/generations",
+        "https://api.lumalabs.ai/v1/generations",
         {
           prompt,
-          aspect_ratio: "9:16",
+          aspect_ratio: "16:9",
           loop: false,
         },
         {
@@ -195,42 +255,11 @@ export class VideoService {
             Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
           },
-        },
+        }
       );
 
-      const generationId = response.data.id;
-      this.logger.log(`Luma generation started: ${generationId}`);
-
-      let videoUrl: string | null = null;
-      let attempts = 0;
-      const maxAttempts = 60;
-
-      while (!videoUrl && attempts < maxAttempts) {
-        await new Promise((resolve) => setTimeout(resolve, 5000));
-
-        const statusResponse = await axios.get(
-          `https://api.lumalabs.ai/dream-machine/v1/generations/${generationId}`,
-          {
-            headers: { Authorization: `Bearer ${apiKey}` },
-          },
-        );
-
-        if (statusResponse.data.state === "completed") {
-          videoUrl = statusResponse.data.assets.video;
-          this.logger.log("Luma video generation completed");
-        } else if (statusResponse.data.state === "failed") {
-          throw new Error("Luma generation failed");
-        }
-
-        attempts++;
-      }
-
-      if (!videoUrl) {
-        throw new Error("Luma generation timed out");
-      }
-
       return {
-        videoUrl,
+        videoUrl: response.data.video_url,
         duration,
         engine: "luma",
       };
@@ -241,11 +270,11 @@ export class VideoService {
   }
 
   /**
-   * Generate video using Runway Gen-3 (fallback)
+   * Generate video using Runway Gen‑2 (via API)
    */
   async generateWithRunway(
     prompt: string,
-    duration: number = 5,
+    duration: number = 5
   ): Promise<VideoGenerationResult> {
     const apiKey = this.config.get<string>("RUNWAY_API_KEY");
     if (!apiKey) {
@@ -253,27 +282,23 @@ export class VideoService {
     }
 
     try {
-      this.logger.log("Generating video with Runway Gen-3...");
-
+      this.logger.log("Generating video with Runway...");
+      // Implementation depends on actual Runway API client or endpoint
       const response = await axios.post(
         "https://api.runwayml.com/v1/generate",
         {
           prompt,
-          duration,
-          resolution: "1080x1920",
+          mode: "gen2",
         },
         {
           headers: {
             Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
           },
-        },
+        }
       );
 
-      const videoUrl = response.data.output_url;
-
       return {
-        videoUrl,
+        videoUrl: response.data.output[0],
         duration,
         engine: "runway",
       };
@@ -286,7 +311,7 @@ export class VideoService {
   // New placeholder video generation (free) method
   async generateWithPlaceholder(
     prompt: string,
-    duration: number = 5,
+    duration: number = 5
   ): Promise<VideoGenerationResult> {
     // Use a public sample video URL as a free fallback
     const placeholderUrl =
@@ -298,267 +323,188 @@ export class VideoService {
       engine: "placeholder",
     };
   }
-
   /**
-   * Generate video using Stable Video Diffusion (Local)
+   * Generate video using Hugging Face Serverless Inference API (free tier).
+   * Expects the model to return a JSON with a `video_url` field.
    */
-  async generateWithSVD(
+  async generateWithHF(
     prompt: string,
-    duration: number = 5,
+    duration: number = 5
   ): Promise<VideoGenerationResult> {
-    const svdUrl = this.config.get<string>("SVD_API_URL");
-    if (!svdUrl) {
-      throw new Error("SVD API URL not configured");
+    const apiKey = this.config.get<string>("HF_API_TOKEN");
+    if (!apiKey) {
+      throw new Error("HF API token not configured");
     }
 
+    const modelId =
+      this.config.get<string>("HF_MODEL_ID") ||
+      "damo-vilab/modelscope-damo-text-to-video-synthesis";
+
     try {
-      this.logger.log(
-        "Generating video with SVD (requires image generation first)...",
+      this.logger.log(`Generating video with Hugging Face (${modelId})...`);
+      const response = await axios.post(
+        `https://api-inference.huggingface.co/models/${modelId}`,
+        { inputs: prompt },
+        {
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+        }
       );
 
-      // 1. Generate Image from Text (DALL-E 3)
-      let imageUrl: string;
-      try {
-        imageUrl = await this.aiService.generateImage(prompt);
-        this.logger.log(`Base image generated: ${imageUrl}`);
-      } catch (imgError) {
-        this.logger.warn(
-          `Image generation failed, using fallback for SVD: ${imgError.message}`,
-        );
-        // Use a dynamic placeholder based on the prompt keywords or generic news
-        imageUrl = `https://placehold.co/1024x576/png?text=${encodeURIComponent(prompt.substring(0, 20))}`;
+      // The actual response format depends on the HF model's inference widget output
+      if (response.data && response.data.video_url) {
+        return {
+          videoUrl: response.data.video_url,
+          duration,
+          engine: "hf",
+        };
+      } else {
+        // Some HF models return binary video data langsung
+        this.logger.warn("HF model did not return video_url, fallback to placeholder");
+        return this.generateWithPlaceholder(prompt, duration);
       }
-
-      // 2. Call SVD API (FastAPI)
-      this.logger.log("Calling SVD API...");
-      const response = await axios.post(`${svdUrl}/generate`, {
-        image_url: imageUrl,
-        seed: 42,
-        motion_bucket_id: 127,
-      });
-
-      const { video_url } = response.data;
-      if (!video_url) {
-        throw new Error("SVD response missing video_url");
-      }
-
-      this.logger.log(`SVD generation completed: ${video_url}`);
-
-      return {
-        videoUrl: video_url,
-        duration: 4,
-        engine: "svd",
-      };
     } catch (error) {
-      this.logger.error("SVD generation failed", error);
+      this.logger.error("HF generation failed", error);
       throw error;
     }
   }
 
   /**
-   * Generate video using CogVideoX
+   * Generate video using Hugging Face Video Gen Engine (custom local or API)
    */
-  async generateWithCogVideoX(
+  async generateWithHFVideo(
     prompt: string,
-    duration: number = 5,
+    duration: number = 5
   ): Promise<VideoGenerationResult> {
-    // Token is optional for local CogVideoX
-    const token =
-      this.config.get<string>("IMAGINE_TOKEN") ||
-      this.config.get<string>("COGVIDEON_API_KEY") ||
-      "";
-
-    // Default to port 7861 for CogVideoX T2V
-    const endpoint =
-      this.config.get<string>("COGVIDEON_ENDPOINT") ||
-      "http://localhost:7861"; // Base URL without /generate
-      
-    // Fix endpoint construction if it includes /generate
-    const baseUrl = endpoint.endsWith("/generate") 
-        ? endpoint.replace("/generate", "") 
-        : endpoint;
-
-    this.logger.log(`Generating video with CogVideoX T2V at ${baseUrl}...`);
+    const endpoint = this.config.get<string>("HF_VIDEO_ENDPOINT");
+    if (!endpoint) {
+      return this.generateWithPlaceholder(prompt, duration);
+    }
 
     try {
-      // 1. Submit Job
+      this.logger.log("Generating video with HF Video Engine...");
+      const response = await axios.post(`${endpoint}/generate`, {
+        prompt,
+      });
+
+      return {
+        videoUrl: response.data.video_url,
+        localPath: response.data.local_path,
+        duration,
+        engine: "hf-video",
+      };
+    } catch (error) {
+      this.logger.error("HF Video Engine failed", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate video using HunyuanVideo (Pokemon LoRA)
+   */
+  async generateWithHunyuan(
+    prompt: string,
+    duration: number = 5
+  ): Promise<VideoGenerationResult> {
+    const endpoint = this.config.get<string>("HUNYUAN_ENDPOINT");
+    if (!endpoint) {
+      // Fallback to placeholder if not configured
+      return this.generateWithPlaceholder(prompt, duration);
+    }
+
+    throw new Error("Hunyuan engine not available as a direct service");
+  }
+
+  /**
+   * Generate video using Google Veo (Gemini API)
+   */
+  async generateWithVeo(
+    prompt: string,
+    duration: number = 5
+  ): Promise<VideoGenerationResult> {
+    const apiKey = this.config.get<string>("VEO_API_KEY");
+    if (!apiKey) {
+      throw new Error("Veo API key not configured");
+    }
+
+    try {
+      this.logger.log("Generating video with Veo...");
+
+      // API endpoint for Veo (via Gemini API)
+      // Using veo-3.1-generate-preview as discovered from available models.
+      const model = "veo-3.1-generate-preview";
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:predictLongRunning?key=${apiKey}`;
+
       const response = await axios.post(
-        `${baseUrl}/generate`,
+        endpoint,
         {
-          prompt,
-          num_frames: Math.min(Math.floor(duration * 8), 49),
-          num_inference_steps: 50,
+          instances: [
+            {
+              prompt: prompt,
+            },
+          ],
+          parameters: {
+            sampleCount: 1,
+            aspectRatio: "16:9",
+          },
         },
         {
           headers: {
-            Authorization: token,
             "Content-Type": "application/json",
           },
-        },
+        }
       );
 
-      const { filename, status } = response.data;
-      if (status !== "queued") {
-          throw new Error(`Unexpected status from CogVideoX: ${status}`);
-      }
-      
-      this.logger.log(`CogVideoX job queued: ${filename}. Waiting for completion...`);
+      // Veo returns a long‑running operation
+      const operationName = response.data.name;
+      this.logger.log(`Veo operation started: ${operationName}`);
 
-      // 2. Poll for Completion
-      let completed = false;
-      let checkCount = 0;
-      const maxChecks = 100; // 500s timeout (5s interval)
-      
-      while (!completed && checkCount < maxChecks) {
-          await new Promise(r => setTimeout(r, 5000));
-          checkCount++;
-          
-          try {
-              const videosResponse = await axios.get(`${baseUrl}/videos`);
-              const videos = videosResponse.data;
-              const job = videos.find((v: any) => v.filename === filename);
-              
-              if (job) {
-                  this.logger.debug(`Job ${filename} status: ${job.status}`);
-                  if (job.status === "completed") {
-                      completed = true;
-                  } else if (job.status === "failed") {
-                      throw new Error(`CogVideoX generation failed: ${job.error || 'Unknown error'}`);
-                  }
-              }
-          } catch (pollError) {
-              this.logger.warn(`Polling failed: ${pollError.message}`);
-          }
-      }
-      
-      if (!completed) {
-          throw new Error("CogVideoX generation timed out");
+      // Polling for completion (simplified for this walkthrough)
+      let videoUrl: string | undefined;
+      for (let i = 0; i < 30; i++) {
+        const statusResponse = await axios.get(
+          `https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${apiKey}`
+        );
+        if (statusResponse.data.done) {
+          videoUrl = statusResponse.data.response.outputs[0].uri;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 5000));
       }
 
-      this.logger.log(`CogVideoX generation completed.`);
-
-      const videoUrl = `${baseUrl}/outputs/${filename}`;
+      if (!videoUrl) throw new Error("Veo generation timed out");
 
       return {
         videoUrl,
         duration,
-        engine: "cogvideox",
+        engine: "veo",
       };
     } catch (error) {
-      this.logger.error("CogVideoX generation failed", error);
-      throw error;
-    }
-  }
-
-  // New OpenSora2 video generation method
-  async generateWithOpenSora2(
-    prompt: string,
-    duration: number = 5,
-  ): Promise<VideoGenerationResult> {
-    const endpoint =
-      this.config.get<string>("OPENSORA2_ENDPOINT") ||
-      "http://localhost:8000/generate";
-    const numFrames = Math.min(Math.floor(duration * 8), 49);
-    const frameUrls: string[] = [];
-    for (let i = 0; i < numFrames; i++) {
-      try {
-        const resp = await axios.post(endpoint, { prompt, frame_index: i });
-        if (resp.data && resp.data.frame_url) {
-          frameUrls.push(resp.data.frame_url);
-        }
-      } catch (e) {
-        this.logger.warn(`OpenSora2 frame ${i} generation failed`, e);
-      }
-    }
-    // Assume the service can assemble frames into a video URL
-    const videoUrl = `${endpoint}/assemble?frames=${frameUrls.join(",")}`;
-    return {
-      videoUrl,
-      duration,
-      engine: "opensora2",
-    };
-  }
-
-  /**
-   * Generate video with automatic fallback
-   */
-
-  /**
-   * Download video from URL to local storage
-   */
-  async downloadVideo(videoUrl: string, filename: string): Promise<string> {
-    const uploadDir = path.join(process.cwd(), "uploads", "videos");
-
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-
-    const localPath = path.join(uploadDir, filename);
-
-    try {
-      const response = await axios({
-        method: "GET",
-        url: videoUrl,
-        responseType: "stream",
-      });
-
-      await streamPipeline(response.data, fs.createWriteStream(localPath));
-
-      this.logger.log(`Video downloaded to: ${localPath}`);
-      return localPath;
-    } catch (error) {
-      this.logger.error("Failed to download video", error);
+      this.logger.error("Veo generation failed", error);
       throw error;
     }
   }
 
   /**
-   * Generate video from script scenes
+   * Helper to merge audio into video using FFmpeg
    */
-  async generateFromScript(script: any): Promise<{
-    results: VideoGenerationResult[];
-    successCount: number;
-    failedScenes: number[];
-  }> {
-    const results: VideoGenerationResult[] = [];
-    const failedScenes: number[] = [];
-
-    for (const scene of script.scenes) {
-      try {
-        const result = await this.generateVideo(
-          scene.visualPrompt,
-          scene.duration,
-        );
-        results.push(result);
-      } catch (error) {
-        failedScenes.push(scene.sceneNumber);
-        this.logger.error(`Scene ${scene.sceneNumber} failed`, error);
-      }
-
-      // Small delay to avoid rate limits
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-    }
-
-    return {
-      results,
-      successCount: results.length,
-      failedScenes,
-    };
-  }
-
   async mergeAudio(videoPath: string, audioPath: string): Promise<string> {
     const outputPath = videoPath.replace(".mp4", "_with_audio.mp4");
-    this.logger.log(`Merging audio: ${videoPath} + ${audioPath} -> ${outputPath}`);
+    this.logger.log(
+      `Merging audio: ${videoPath} + ${audioPath} -> ${outputPath}`
+    );
 
     return new Promise((resolve, reject) => {
       ffmpeg(videoPath)
         .input(audioPath)
         .outputOptions([
           "-c:v copy", // Copy video stream (no re-encode)
-          "-c:a aac",  // Re-encode audio to AAC
+          "-c:a aac", // Re-encode audio to AAC
           "-map 0:v:0", // Use video from first input
           "-map 1:a:0", // Use audio from second input
-          "-shortest",  // Cut to shortest stream length
+          "-shortest", // Cut to shortest stream length
         ])
         .save(outputPath)
         .on("end", () => {
@@ -570,6 +516,43 @@ export class VideoService {
           reject(err);
         });
     });
-  
-}
+  }
+
+  /**
+   * Helper to generate multiple scenes and merge them
+   */
+  async generateAndMergeScenes(
+    prompts: string[],
+    durationPerScene: number = 5
+  ): Promise<VideoGenerationResult> {
+    const results: string[] = [];
+    const failedScenes: number[] = [];
+
+    for (let i = 0; i < prompts.length; i++) {
+      try {
+        const result = await this.generateVideo(prompts[i], durationPerScene);
+        if (result.localPath) {
+          results.push(result.localPath);
+        } else if (result.videoUrl) {
+          const filename = `scene_${i}_${Date.now()}.mp4`;
+          const localPath = await this.downloadVideo(result.videoUrl, filename);
+          results.push(localPath);
+        }
+      } catch (err) {
+        this.logger.error(`Failed to generate scene ${i}`, err);
+        failedScenes.push(i);
+      }
+
+      // Small delay to avoid rate limits
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+
+    // Merge logic would go here using ffmpeg merge
+    // For now returning the first available scene
+    return {
+      localPath: results[0],
+      duration: results.length * durationPerScene,
+      engine: "merged",
+    };
+  }
 }

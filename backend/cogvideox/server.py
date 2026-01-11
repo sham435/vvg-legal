@@ -412,6 +412,11 @@ def process_job(job):
         seed = job["params"]["seed"]
         filename = job["filename"]
 
+        # CLEANUP BEFORE GENERATION
+        if torch.backends.mps.is_available():
+            torch.mps.empty_cache()
+        gc.collect()
+
         # Define callback
         def progress_callback(pipe, step, timestep, callback_kwargs):
             global PROGRESS_STATE
@@ -420,13 +425,14 @@ def process_job(job):
             time.sleep(1.0)  # Reduced thermal throttling (was 3.0)
             return callback_kwargs
 
-        # Use CPU generator
+        # Use CPU generator for reproducibility across devices
         generator = torch.Generator(device="cpu").manual_seed(seed)
         
         # Run Pipeline
         if not pipe:
             raise Exception("Model not loaded")
 
+        print(f"[{datetime.datetime.now()}] Starting inference for {filename}...")
         with torch.autocast(device_type=DEVICE, dtype=torch.float16):
             frames = pipe(
                 prompt=prompt,
@@ -450,7 +456,17 @@ def process_job(job):
         PROGRESS_STATE["status"] = "idle"
         PROGRESS_STATE["percentage"] = 100
         
+        # CLEANUP AFTER GENERATION
+        del frames
+        if torch.backends.mps.is_available():
+            torch.mps.empty_cache()
+        gc.collect()
+        
     except Exception as e:
+        # CLEANUP ON ERROR
+        if torch.backends.mps.is_available():
+            torch.mps.empty_cache()
+        gc.collect()
         print(f"❌ Job Failed: {filename} - {e}")
         update_video_status(filename, "failed", str(e))
         PROGRESS_STATE["status"] = "failed"

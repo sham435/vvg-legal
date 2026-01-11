@@ -1,9 +1,27 @@
 [build]
-# Use the Dockerfile in the backend folder
-dockerfile = "backend/Dockerfile"
+builder = "NIXPACKS"
 
 [deploy]
-# Command to start the NestJS server
 startCommand = "npm run start:prod"
-# Healthcheck endpoint
 healthcheckPath = "/health"
+
+# Backend API
+[services.backend]
+dockerfile = "backend/Dockerfile"
+
+# Video engines
+[services.luma]
+dockerfile = "backend/luma/Dockerfile"
+port = 8000
+
+[services.runway]
+dockerfile = "backend/runway/Dockerfile"
+port = 8001
+
+[services.cogvideox]
+dockerfile = "backend/cogvideox/Dockerfile"
+port = 8002
+
+[services.svd]
+dockerfile = "backend/svd/Dockerfile"
+port = 8003

@@ -6,6 +6,8 @@ import { TrendsModule } from "../trends/trends.module";
 import { AiModule } from "../ai/ai.module";
 import { VideoModule } from "../video/video.module";
 import { NotificationsModule } from "../notifications/notifications.module";
+import { PipelineModule } from "../pipeline/pipeline.module";
+import { PublishModule } from "../publish/publish.module";
 
 @Module({
   imports: [
@@ -19,6 +21,8 @@ import { NotificationsModule } from "../notifications/notifications.module";
     AiModule,
     VideoModule,
     NotificationsModule,
+    PipelineModule,
+    PublishModule,
   ],
   controllers: [SchedulerController],
   providers: [SchedulerService],

@@ -37,9 +37,16 @@ export class ThumbnailService {
       "",
     );
 
-    if (!this.midjourneyApiUrl || !this.midjourneyApiKey) {
+    if (!this.midjourneyApiKey) {
       this.logger.warn(
-        "Midjourney API URL or KEY not configured. Thumbnail generation will fail.",
+        "⚠️ Midjourney API KEY is not configured (MIDJOURNEY_API_KEY). Thumbnail generation will fail. " +
+        "Please provide a valid key in your environment settings.",
+      );
+    }
+    
+    if (this.midjourneyApiUrl === "http://midjourney-api-public:4000") {
+      this.logger.log(
+        "ℹ️ Using default Midjourney API URL (public instance).",
       );
     }
   }

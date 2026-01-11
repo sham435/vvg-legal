@@ -25,7 +25,7 @@ export interface CredentialsStatus {
   instagram: boolean;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
 
 export const publishService = {
   async getStatus(): Promise<PublishStatus> {

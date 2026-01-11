@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { Cron, CronExpression, SchedulerRegistry } from "@nestjs/schedule";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../../common/prisma/prisma.service";
@@ -6,19 +6,24 @@ import { TrendsService } from "../trends/trends.service";
 import { AiService } from "../ai/ai.service";
 import { VideoService } from "../video/video.service";
 import { NotificationsService } from "../notifications/notifications.service";
-import { CronJob } from "cron";
+import { PipelineService } from "../pipeline/pipeline.service";
+import { PublishService } from "../publish/publish.service";
+import { Article } from "../news/news.service";
 import * as fs from "fs";
 import * as path from "path";
 import { v4 as uuidv4 } from "uuid";
 
 @Injectable()
-export class SchedulerService {
+export class SchedulerService implements OnModuleInit {
   private readonly logger = new Logger(SchedulerService.name);
   private isAutoGenerationEnabled = false;
   private requiresManualApproval = true;
   // Path to the shared videos.json file
-  private readonly videoDbPath =
-    "/Users/sham4/Antigravity/vvg/viral-video-generator/backend/outputs/videos.json";
+  private readonly videoDbPath = path.join(
+    process.cwd(),
+    "outputs",
+    "videos.json"
+  );
 
   constructor(
     private readonly config: ConfigService,
@@ -28,6 +33,8 @@ export class SchedulerService {
     private readonly videoService: VideoService,
     private readonly notificationsService: NotificationsService,
     private readonly schedulerRegistry: SchedulerRegistry,
+    private readonly pipelineService: PipelineService,
+    private readonly publishService: PublishService
   ) {
     // Load settings from config
     this.isAutoGenerationEnabled =
@@ -42,7 +49,7 @@ export class SchedulerService {
   private queueJobInFile(
     topic: any,
     customPrompt?: string,
-    fullScript?: string,
+    fullScript?: string
   ) {
     try {
       let videos = [];
@@ -85,7 +92,7 @@ export class SchedulerService {
       videos.push(newJob);
       fs.writeFileSync(this.videoDbPath, JSON.stringify(videos, null, 2));
       this.logger.log(
-        `✅ Job queued: ${newJob.filename} (Prompt: ${finalPrompt.substring(0, 50)}...)`,
+        `✅ Job queued: ${newJob.filename} (Prompt: ${finalPrompt.substring(0, 50)}...)`
       );
     } catch (error) {
       this.logger.error(`Failed to queue job in file: ${error.message}`);
@@ -153,12 +160,14 @@ export class SchedulerService {
    */
   @Cron(CronExpression.EVERY_HOUR, { name: "hourly-generation" })
   async handleHourlyVideoGeneration() {
+    this.logger.log("🎬 [Internal Scheduler] Checking if auto-generation is enabled...");
+    
     if (!this.isAutoGenerationEnabled) {
-      this.logger.log("Auto-generation disabled, skipping");
+      this.logger.log("⏸️ [Internal Scheduler] Auto-generation is currently DISABLED (ENABLE_AUTO_GENERATION=false). Skipping check.");
       return;
     }
 
-    this.logger.log("🎬 Starting hourly video generation...");
+    this.logger.log("🎬 [Internal Scheduler] Auto-generation is ENABLED. Starting process...");
 
     try {
       // 1. Fetch fresh trending topics
@@ -172,44 +181,17 @@ export class SchedulerService {
         return;
       }
 
-      // 3. Generate AI Script & Visual Prompt
-      this.logger.log(`🤖 Generating script for topic: ${topic.title}`);
-      let visualPrompt = "";
-      let fullScriptText = "";
+      this.logger.log(`🤖 Automated Pipeline: Running for topic: ${topic.title}`);
 
-      try {
-        // Add a timeout to avoid hanging forever if OpenAI is slow
-        const script = await this.aiService.generateScript(
-          topic.title,
-          topic.description,
-        );
+      // 3. Run the full pipeline
+      const article: Article = {
+          title: topic.title,
+          description: topic.description,
+          url: topic.url,
+      };
 
-        if (script) {
-          // Basic text representation of the script for now (or store JSON if field allows)
-          // Converting structured script to text for simple storage
-          fullScriptText = JSON.stringify(script);
-        }
-
-        // Strategy: Use the visual prompt from the first scene for the video generation
-        // (CogVideoX generates short clips, so Scene 1 is appropriate)
-        if (script.scenes && script.scenes.length > 0) {
-          visualPrompt = script.scenes[0].visualPrompt;
-
-          // If visual prompt is too short, append style
-          if (visualPrompt.length < 50) {
-            visualPrompt +=
-              ", cinematic lighting, 4k, trending on artstation, photorealistic";
-          }
-        }
-      } catch (aiError) {
-        this.logger.error(
-          `AI Script generation failed: ${aiError.message}. Falling back to basic prompt.`,
-        );
-        // visualPrompt stays empty, queueJobInFile handles fallback
-      }
-
-      // 4. Queue Job with customized prompt AND full script
-      this.queueJobInFile(topic, visualPrompt, fullScriptText);
+      const result = await this.pipelineService.runPipeline(article);
+      this.logger.log(`Pipeline complete: ${result.type}, Title: ${result.title}`);
 
       // Mark topic as used
       await this.trendsService.markTopicAsUsed(topic.id);
@@ -217,7 +199,7 @@ export class SchedulerService {
       this.logger.error("Hourly generation failed", error);
       await this.notificationsService.sendErrorAlert(
         "Hourly video generation failed",
-        error.message,
+        error.message
       );
     }
   }
@@ -249,37 +231,18 @@ export class SchedulerService {
       throw new Error("No topic available");
     }
 
-    // Manual triggers ALSO go through the AI Script flow
-    this.logger.log(`🤖 Manual trigger: Generating script for ${topic.title}`);
-    let visualPrompt = "";
-    let fullScriptText = "";
+    this.logger.log(`🤖 Manual trigger: Running pipeline for ${topic.title}`);
+    
+    const article: Article = {
+        title: topic.title,
+        description: topic.description,
+        url: topic.url,
+    };
 
-    try {
-      const script = await this.aiService.generateScript(
-        topic.title,
-        topic.description,
-      );
-      if (script) {
-        fullScriptText = JSON.stringify(script);
-      }
-      if (script.scenes && script.scenes.length > 0) {
-        visualPrompt = script.scenes[0].visualPrompt;
-        if (visualPrompt.length < 50) {
-          visualPrompt += ", cinematic lighting, 4k, highly detailed";
-        }
-      }
-    } catch (e) {
-      this.logger.warn(`AI gen failed for manual trigger: ${e.message}`);
-    }
-
-    this.queueJobInFile(topic, visualPrompt, fullScriptText);
-
-    return { message: "Video generation queued", topicId: topic.id };
+    const result = await this.pipelineService.runPipeline(article);
+    return { message: "Video generation complete", type: result.type, videoUrl: result.url };
   }
 
-  /**
-   * Update scheduler settings
-   */
   /**
    * Update a video job in the file
    */
@@ -312,8 +275,11 @@ export class SchedulerService {
   }
 
   // Path to settings file
-  private readonly settingsPath =
-    "/Users/sham4/Antigravity/vvg/viral-video-generator/backend/outputs/settings.json";
+  private readonly settingsPath = path.join(
+    process.cwd(),
+    "outputs",
+    "settings.json"
+  );
 
   private loadSettings() {
     try {

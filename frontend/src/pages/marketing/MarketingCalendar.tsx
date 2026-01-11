@@ -78,7 +78,7 @@ export default function MarketingCalendar() {
           <h3 className="text-lg font-semibold text-gray-900">Upcoming Schedule</h3>
         </div>
         <div className="divide-y divide-gray-100">
-          {events.map((event: any) => (
+          {Array.isArray(events) && events.map((event: any) => (
              <div key={event.id} className="p-4 flex items-center justify-between hover:bg-gray-50">
                <div className="flex items-center gap-4">
                  <div className="p-2 bg-gray-100 rounded-lg text-center min-w-[50px]">

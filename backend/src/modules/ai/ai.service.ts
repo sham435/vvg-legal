@@ -24,9 +24,17 @@ export class AiService {
   private openai: OpenAI;
 
   constructor(private readonly config: ConfigService) {
-    const apiKey = this.config.get<string>("OPENAI_API_KEY");
+    // Use OpenRouter API with Nemotron Nano model
+    const apiKey = this.config.get<string>("OPENROUTER_API_KEY") || this.config.get<string>("OPENAI_API_KEY");
     if (apiKey) {
-      this.openai = new OpenAI({ apiKey });
+      this.openai = new OpenAI({
+        apiKey,
+        baseURL: "https://openrouter.ai/api/v1",
+        defaultHeaders: {
+          "HTTP-Referer": "https://vvg.local",
+          "X-Title": "Viral Video Generator",
+        },
+      });
     }
   }
 
@@ -73,7 +81,7 @@ Format your response as JSON:
 
     try {
       const completion = await this.openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
+        model: "nvidia/nemotron-nano-9b-v2:free",
         messages: [
           {
             role: "system",
@@ -83,7 +91,6 @@ Format your response as JSON:
           { role: "user", content: prompt },
         ],
         temperature: 0.8,
-        response_format: { type: "json_object" },
       });
 
       const scriptData = JSON.parse(completion.choices[0].message.content);
@@ -137,7 +144,7 @@ Keep it under 200 characters.`;
 
     try {
       const completion = await this.openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
+        model: "nvidia/nemotron-nano-9b-v2:free",
         messages: [{ role: "user", content: prompt }],
         temperature: 0.7,
         max_tokens: 100,
@@ -147,6 +154,51 @@ Keep it under 200 characters.`;
     } catch (error) {
       this.logger.error("Failed to generate thumbnail prompt", error);
       throw error;
+    }
+  }
+
+  /**
+   * Refine a simple video prompt into a detailed cinematic prompt
+   */
+  async refineVideoPrompt(simplePrompt: string): Promise<string> {
+    if (!this.openai) {
+      return simplePrompt;
+    }
+
+    const prompt = `Convert this simple video generation prompt into a detailed, cinematic "Director's Prompt" for a video generation AI.
+Original Prompt: "${simplePrompt}"
+
+Requirements:
+- Add specific visual details (lighting, camera angle, textures, mood).
+- Use high-quality keywords (cinematic, 4k, hyper-realistic).
+- Output ONLY the refined prompt, no extra text, no reasoning.
+
+REFINED PROMPT:`;
+
+    try {
+      const completion = await this.openai.chat.completions.create({
+        model: "nvidia/nemotron-nano-9b-v2:free",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.7,
+        max_tokens: 500,
+      });
+
+      let refined = completion.choices[0].message.content?.trim();
+      
+      // Clean up potential unwanted preambles
+      if (refined) {
+        refined = refined.replace(/^Refined Prompt: /i, '');
+        refined = refined.replace(/^"|"$/g, '');
+      }
+
+      if (!refined) {
+        this.logger.warn(`OpenRouter returned empty content. Full response: ${JSON.stringify(completion)}`);
+      }
+      this.logger.log(`Refined prompt from "${simplePrompt}" to "${refined}"`);
+      return refined || simplePrompt;
+    } catch (error) {
+      this.logger.warn("Failed to refine video prompt (OpenRouter)", error);
+      return simplePrompt;
     }
   }
 
@@ -176,10 +228,10 @@ Return only the optimized title, nothing else.`;
 
     try {
       const completion = await this.openai.chat.completions.create({
-        model: "gpt-3.5-turbo",
+        model: "nvidia/nemotron-nano-9b-v2:free",
         messages: [{ role: "user", content: prompt }],
         temperature: 0.7,
-        max_tokens: 50,
+        max_tokens: 100,
       });
 
       return completion.choices[0].message.content.trim();

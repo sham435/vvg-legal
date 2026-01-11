@@ -6,9 +6,10 @@ import { ScriptModule } from "../script/script.module";
 import { VyroModule } from "../vyro/vyro.module";
 import { VideoModule } from "../video/video.module";
 import { MusicModule } from "../music/music.module";
+import { PublishModule } from "../publish/publish.module";
 
 @Module({
-  imports: [NewsModule, ScriptModule, VyroModule, VideoModule, MusicModule],
+  imports: [NewsModule, ScriptModule, VyroModule, VideoModule, MusicModule, PublishModule],
   controllers: [PipelineController],
   providers: [PipelineService],
   exports: [PipelineService],

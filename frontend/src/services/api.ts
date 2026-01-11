@@ -70,7 +70,7 @@ export const apiService = {
     toggleService: (service: string, enabled: boolean) => api.post('/settings/toggle-service', { service, enabled }),
     testConnection: (service: string) => 
       api.post('/settings/test-connection', { service }),
-    getApiKeys: () => api.get('http://localhost:3000/api-keys'),
+    getApiKeys: () => api.get('http://localhost:8080/api/settings'),
     updateApiKeys: (keys: Record<string, string>) => api.post('/settings/keys', keys),
   },
   system: {
@@ -94,8 +94,8 @@ export const apiService = {
   },
   
   marketing: {
-    getOverview: () => api.get('http://localhost:3000/marketing/overview'),
-    getCalendar: () => api.get('http://localhost:5173/marketing/calendar'),
+    getOverview: () => api.get('http://localhost:8080/api/marketing/overview'),
+    getCalendar: () => api.get('http://localhost:8080/api/marketing/calendar'),
     getAccounts: () => api.get('/marketing/accounts'),
     toggleAccount: (platform: string) => api.post(`/marketing/accounts/${platform}/toggle`),
   },
