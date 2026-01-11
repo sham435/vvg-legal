@@ -1,5 +1,6 @@
-import { Controller, Post, HttpCode, HttpStatus } from "@nestjs/common";
+import { Controller, Post, Body, HttpCode, HttpStatus } from "@nestjs/common";
 import { PipelineService, PipelineResult } from "./pipeline.service";
+import { Article } from "../news/news.service";
 
 @Controller("pipeline")
 export class PipelineController {
@@ -7,7 +8,7 @@ export class PipelineController {
 
   @Post("trigger")
   @HttpCode(HttpStatus.OK)
-  async triggerPipeline(): Promise<PipelineResult> {
-    return this.pipelineService.runPipeline();
+  async triggerPipeline(@Body() article?: Article): Promise<PipelineResult> {
+    return this.pipelineService.runPipeline(article);
   }
 }

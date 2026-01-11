@@ -1,0 +1,23 @@
+# Railway ignore file
+node_modules/
+dist/
+build/
+.next/
+out/
+uploads/
+backend/cogvideox/models/
+backend/svd/checkpoints/
+*.safetensors
+*.pth
+*.pt
+*.dylib
+backend/svd/.pt2/
+.venv/
+env/
+**/__pycache__/
+*.log
+backend/generation_output.json
+backend/generation_retry.json
+backend/generation_retry_2.json
+backend/outputs/
+.git/
