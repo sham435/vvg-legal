@@ -22,7 +22,9 @@ async function bootstrap() {
   );
 
   //  // Global API Prefix
-  app.setGlobalPrefix("api"); // All routes start with /api
+  app.setGlobalPrefix("api", {
+    exclude: ["/", "terms", "privacy", "tiktokGTu6guA6BWbvFlR9iChxomYvIBo6ZS4Y.txt", "health"],
+  }); // All routes start with /api except excluded ones
 
   // Enable CORS
   app.enableCors({
