@@ -24,7 +24,7 @@ async function bootstrap() {
     const result = await schedulerService.triggerManualGeneration();
     
     logger.log(`✅ Pipeline triggered successfully!`);
-    logger.log(`Topic ID: ${result.topicId}`);
+    logger.log(`Result: ${JSON.stringify(result)}`);
     logger.log('The system is now:\n1. Generating script\n2. Generating video\n3. Uploading to YouTube');
     logger.log('Check the logs or database for progress.');
     

@@ -6,7 +6,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { promisify } from "util";
 import { pipeline } from "stream";
-import * as ffmpeg from "fluent-ffmpeg";
+import ffmpeg from "fluent-ffmpeg";
 
 const streamPipeline = promisify(pipeline);
 
@@ -25,7 +25,25 @@ export class VideoService {
   constructor(
     private readonly config: ConfigService,
     private readonly aiService: AiService
-  ) {}
+  ) {
+    this.videoDbPath = path.join(process.cwd(), "uploads", "videos", "metadata.json");
+  }
+
+  private readonly videoDbPath: string;
+
+  /**
+   * Get all generated videos from the metadata file
+   */
+  public async getAllVideos(): Promise<any[]> {
+    try {
+      if (!fs.existsSync(this.videoDbPath)) return [];
+      const data = fs.readFileSync(this.videoDbPath, "utf8");
+      return JSON.parse(data);
+    } catch (err) {
+      this.logger.error("Failed to read video metadata", err);
+      return [];
+    }
+  }
 
   /**
    * Health check for video engines (circuit breaker)
@@ -571,6 +589,17 @@ export class VideoService {
   }
 
   /**
+   * Generate videos for all scenes in a script
+   */
+  public async generateFromScript(script: any): Promise<VideoGenerationResult> {
+    if (script && script.scenes) {
+      const prompts = script.scenes.map((s: any) => s.visualPrompt || s.description);
+      return this.generateAndMergeScenes(prompts);
+    }
+    throw new Error("Invalid script format");
+  }
+
+  /**
    * Helper to merge audio into video using FFmpeg
    */
   async mergeAudio(videoPath: string, audioPath: string): Promise<string> {
@@ -580,7 +609,7 @@ export class VideoService {
     );
 
     return new Promise((resolve, reject) => {
-      ffmpeg(videoPath)
+      (ffmpeg(videoPath) as any)
         .input(audioPath)
         .outputOptions([
           "-c:v copy", // Copy video stream (no re-encode)

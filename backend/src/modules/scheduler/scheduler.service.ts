@@ -24,6 +24,12 @@ export class SchedulerService implements OnModuleInit {
     "outputs",
     "videos.json"
   );
+  // Path to settings file
+  private readonly settingsPath = path.join(
+    process.cwd(),
+    "outputs",
+    "settings.json"
+  );
 
   constructor(
     private readonly config: ConfigService,
@@ -36,11 +42,11 @@ export class SchedulerService implements OnModuleInit {
     private readonly pipelineService: PipelineService,
     private readonly publishService: PublishService
   ) {
-    // Load settings from config
+    // Initial load from environment variables
     this.isAutoGenerationEnabled =
       this.config.get<string>("ENABLE_AUTO_GENERATION") === "true";
     this.requiresManualApproval =
-      this.config.get<string>("REQUIRE_MANUAL_APPROVAL") === "true";
+      this.config.get<string>("REQUIRE_MANUAL_APPROVAL", "true") === "true";
   }
 
   /**
@@ -274,21 +280,25 @@ export class SchedulerService implements OnModuleInit {
     }
   }
 
-  // Path to settings file
-  private readonly settingsPath = path.join(
-    process.cwd(),
-    "outputs",
-    "settings.json"
-  );
-
   private loadSettings() {
     try {
       if (fs.existsSync(this.settingsPath)) {
         const data = JSON.parse(fs.readFileSync(this.settingsPath, "utf8"));
-        if (data.enableAutoGeneration !== undefined)
+        
+        // ENV variables should override stored parameters if they are explicitly set
+        const envAutoGen = this.config.get<string>("ENABLE_AUTO_GENERATION");
+        if (envAutoGen !== undefined) {
+            this.isAutoGenerationEnabled = envAutoGen === "true";
+        } else if (data.enableAutoGeneration !== undefined) {
           this.isAutoGenerationEnabled = data.enableAutoGeneration;
-        if (data.requireManualApproval !== undefined)
+        }
+
+        const envManualApprove = this.config.get<string>("REQUIRE_MANUAL_APPROVAL");
+        if (envManualApprove !== undefined) {
+            this.requiresManualApproval = envManualApprove === "true";
+        } else if (data.requireManualApproval !== undefined) {
           this.requiresManualApproval = data.requireManualApproval;
+        }
       }
     } catch (e) {
       this.logger.error("Failed to load settings.json", e);

@@ -22,8 +22,12 @@ export class YoutubeService {
     const redirectUri = this.config.get<string>("YOUTUBE_REDIRECT_URI");
     const refreshToken = this.config.get<string>("YOUTUBE_REFRESH_TOKEN");
 
+    this.logger.log(`Initializing YouTube API with Client ID: ${clientId ? 'Configured' : 'MISSING'}`);
+    this.logger.log(`YouTube Client Secret: ${clientSecret ? 'Configured' : 'MISSING'}`);
+    this.logger.log(`YouTube Refresh Token: ${refreshToken ? 'Configured' : 'MISSING'}`);
+
     if (!clientId || !clientSecret || !refreshToken) {
-      this.logger.warn("YouTube credentials not fully configured");
+      this.logger.warn("YouTube credentials not fully configured. Video publishing will be disabled.");
       return;
     }
 
@@ -42,7 +46,7 @@ export class YoutubeService {
       auth: oauth2Client,
     });
 
-    this.logger.log("✅ YouTube API initialized");
+    this.logger.log("✅ YouTube API initialized and ready for publishing");
   }
 
   /**

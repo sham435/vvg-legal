@@ -81,7 +81,7 @@ Format your response as JSON:
 
     try {
       const completion = await this.openai.chat.completions.create({
-        model: "nvidia/nemotron-nano-9b-v2:free",
+        model: this.config.get<string>("AI_MODEL", "nvidia/nemotron-nano-9b-v2:free"),
         messages: [
           {
             role: "system",
@@ -144,7 +144,7 @@ Keep it under 200 characters.`;
 
     try {
       const completion = await this.openai.chat.completions.create({
-        model: "nvidia/nemotron-nano-9b-v2:free",
+        model: this.config.get<string>("AI_MODEL", "nvidia/nemotron-nano-9b-v2:free"),
         messages: [{ role: "user", content: prompt }],
         temperature: 0.7,
         max_tokens: 100,
@@ -177,7 +177,7 @@ REFINED PROMPT:`;
 
     try {
       const completion = await this.openai.chat.completions.create({
-        model: "nvidia/nemotron-nano-9b-v2:free",
+        model: this.config.get<string>("AI_MODEL", "nvidia/nemotron-nano-9b-v2:free"),
         messages: [{ role: "user", content: prompt }],
         temperature: 0.7,
         max_tokens: 500,
@@ -228,7 +228,7 @@ Return only the optimized title, nothing else.`;
 
     try {
       const completion = await this.openai.chat.completions.create({
-        model: "nvidia/nemotron-nano-9b-v2:free",
+        model: this.config.get<string>("AI_MODEL", "nvidia/nemotron-nano-9b-v2:free"),
         messages: [{ role: "user", content: prompt }],
         temperature: 0.7,
         max_tokens: 100,
