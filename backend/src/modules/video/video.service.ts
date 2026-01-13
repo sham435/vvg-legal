@@ -96,7 +96,7 @@ export class VideoService {
     const priority = this.config
       .get<string>(
         "VIDEO_ENGINE_PRIORITY",
-        "cosmos,veo,cogvideox,svd,placeholder"
+        "veo,cosmos,cogvideox,svd,placeholder"
       )
       .split(",")
       .map((e) => e.trim());

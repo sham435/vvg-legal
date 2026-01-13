@@ -399,6 +399,10 @@ export class SchedulerService implements OnModuleInit {
 
   onModuleInit() {
     this.loadSettings();
+    this.logger.log(`🚀 [Scheduler] Initialized. Auto-generation: ${this.isAutoGenerationEnabled ? 'ENABLED' : 'DISABLED'}`);
+    if (this.isAutoGenerationEnabled) {
+        this.logger.log("🎬 [Scheduler] Hourly generation job is active.");
+    }
   }
 
   /**
