@@ -2,6 +2,12 @@ import { Controller, Get, Header } from "@nestjs/common";
 
 @Controller()
 export class AppController {
+  @Get("tiktokGTu6guA6BWbvFlR9iChxomYvIBo6ZS4Y.txt")
+  @Header("Content-Type", "text/plain")
+  getVerification() {
+    return "tiktok-developers-site-verification=GTu6guA6BWbvFlR9iChxomYvIBo6ZS4Y";
+  }
+
   @Get()
   @Header("Content-Type", "text/html")
   getHome() {
