@@ -104,8 +104,8 @@ export class PipelineService {
       }
     } catch (error) {
       this.logger.error(
-        "All video engines failed. Falling back to Article mode.",
-        error,
+        "❌ Video generation stage failed. Falling back to Article mode.",
+        error.message || error,
       );
       // Fallback: Proceed without videoUrl
     }
@@ -124,7 +124,7 @@ export class PipelineService {
 
       // Step 6: Auto-publish if localPath exists
       if (localPath) {
-          this.logger.log("🚀 Attempting auto-publish to YouTube...");
+          this.logger.log(`🚀 Attempting auto-publish to YouTube: ${result.title}`);
           try {
               await this.publishService.uploadToYouTube(
                   localPath,
@@ -133,8 +133,10 @@ export class PipelineService {
               );
               this.logger.log("✅ Auto-published successfully");
           } catch (pubError) {
-              this.logger.error("Auto-publishing failed", pubError);
+              this.logger.error(`❌ Auto-publishing failed: ${pubError.message}`);
           }
+      } else {
+          this.logger.warn("⚠️ Skipping YouTube upload: Video URL exists but local file path is missing (Download failed?)");
       }
 
       return result;

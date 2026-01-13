@@ -19,6 +19,12 @@ export class SchedulerController {
     return this.schedulerService.getStatus();
   }
 
+  @Get("diag")
+  @ApiOperation({ summary: "Get system diagnostics" })
+  getDiag() {
+    return this.schedulerService.getDiagnostics();
+  }
+
   @Post("run-now")
   @ApiOperation({ summary: "Trigger immediate execution" })
   runNow() {

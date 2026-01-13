@@ -119,10 +119,11 @@ export class SchedulerService implements OnModuleInit {
 
   getStatus() {
     const running = this.isCronActive();
-    // In a real app we might track lastRun time in a variable or DB
     return {
       running,
-      lastRun: new Date(), // Placeholder or implement actual tracking
+      autoGenerationEnabled: this.isAutoGenerationEnabled,
+      requiresManualApproval: this.requiresManualApproval,
+      lastRun: new Date(), // Placeholder
       nextRun: running
         ? this.schedulerRegistry
             .getCronJob("hourly-generation")
@@ -130,6 +131,29 @@ export class SchedulerService implements OnModuleInit {
             .toJSDate()
         : null,
     };
+  }
+
+  async getDiagnostics() {
+      const unusedTopics = await this.trendsService.getAllTopics(5, false);
+      const latestVideos = await this.prisma.video.findMany({ take: 5, orderBy: { createdAt: 'desc' } });
+      const youtubeConfigured = !!(this.config.get("YOUTUBE_CLIENT_ID") && this.config.get("YOUTUBE_REFRESH_TOKEN"));
+      const nvidiaConfigured = !!(this.config.get("NVIDIA_API_KEY") || this.config.get("OPENROUTER_API_KEY"));
+      const newsApiConfigured = !!this.config.get("NEWS_API_KEY");
+
+      return {
+          system: {
+              autoGenerationEnabled: this.isAutoGenerationEnabled,
+              youtubeConfigured,
+              nvidiaConfigured,
+              newsApiConfigured,
+          },
+          counts: {
+              unusedTopics: unusedTopics.length,
+              totalVideos: await this.prisma.video.count(),
+              totalPublishLogs: await this.prisma.publishLog.count(),
+          },
+          latestVideos: latestVideos.map(v => ({ id: v.id, title: v.title, status: v.status })),
+      };
   }
 
   stopCron() {
@@ -197,7 +221,13 @@ export class SchedulerService implements OnModuleInit {
       };
 
       const result = await this.pipelineService.runPipeline(article);
-      this.logger.log(`Pipeline complete: ${result.type}, Title: ${result.title}`);
+      this.logger.log(`✅ Automated Pipeline Finished: ${result.type}, Title: ${result.title}`);
+      
+      if (result.type === 'video' && result.localPath) {
+          this.logger.log(`🚀 Automated Upload should be complete for: ${result.title}`);
+      } else if (result.type === 'article') {
+          this.logger.warn(`⚠️ Pipeline fell back to Article mode. No video was generated/uploaded.`);
+      }
 
       // Mark topic as used
       await this.trendsService.markTopicAsUsed(topic.id);
