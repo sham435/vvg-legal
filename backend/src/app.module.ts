@@ -41,13 +41,27 @@ import { MarketingModule } from "./modules/marketing/marketing.module";
     ScheduleModule.forRoot(),
 
     // BullMQ for queue processing
-    BullModule.forRoot({
-      connection: process.env.REDIS_URL
-        ? { url: process.env.REDIS_URL }
-        : {
-            host: process.env.REDIS_HOST || "localhost",
-            port: parseInt(process.env.REDIS_PORT) || 6379,
+    BullModule.forRootAsync({
+      useFactory: () => {
+        const redisUrl = process.env.REDIS_URL;
+        const redisHost = process.env.REDIS_HOST || "localhost";
+        const redisPort = parseInt(process.env.REDIS_PORT) || 6379;
+
+        return {
+          connection: redisUrl
+            ? { url: redisUrl, maxRetriesPerRequest: null }
+            : {
+                host: redisHost,
+                port: redisPort,
+                maxRetriesPerRequest: null,
+              },
+          // Add resilience for startup/CLI tasks
+          defaultJobOptions: {
+            removeOnComplete: true,
+            attempts: 3,
           },
+        };
+      },
     }),
 
     /*
