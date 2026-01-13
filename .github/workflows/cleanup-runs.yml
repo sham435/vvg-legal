@@ -1,0 +1,20 @@
+name: Cleanup Workflow Runs
+
+on:
+  schedule:
+    - cron: "0 0 * * *" # Daily at midnight
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Delete workflow runs older than 120 hours
+        run: |
+          # 120 hours = 5 days
+          # Using gh CLI's built-in filtering to delete runs
+          gh run delete --all --older-than 5d
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
