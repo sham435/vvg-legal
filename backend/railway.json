@@ -8,6 +8,7 @@
   },
   "deploy": {
     "numReplicas": 1,
+    "startCommand": "npm run start:prod",
     "sleepApplication": false,
     "restartPolicyType": "ALWAYS"
   }
