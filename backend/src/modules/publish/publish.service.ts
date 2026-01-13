@@ -20,6 +20,13 @@ export class PublishService {
   }
 
   /**
+   * Check if the YouTube API is successfully connected and authorized.
+   */
+  async checkYouTubeConnection(): Promise<any> {
+    return this.youtubeService.checkConnection();
+  }
+
+  /**
    * Upload a video to YouTube using the robust YoutubeService (OAuth).
    */
     async uploadToYouTube(

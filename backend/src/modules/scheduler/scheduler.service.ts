@@ -139,7 +139,9 @@ export class SchedulerService implements OnModuleInit {
   async getDiagnostics() {
       const unusedTopics = await this.trendsService.getAllTopics(5, false);
       const latestVideos = await this.prisma.video.findMany({ take: 5, orderBy: { createdAt: 'desc' } });
-      const youtubeConfigured = !!(this.config.get("YOUTUBE_CLIENT_ID") && this.config.get("YOUTUBE_REFRESH_TOKEN"));
+      const youtubeStatus = await this.publishService.checkYouTubeConnection();
+      const newsStatus = await this.trendsService.testNewsApi();
+      const aiStatus = await this.aiService.checkConnection();
       const nvidiaConfigured = !!(this.config.get("NVIDIA_API_KEY") || this.config.get("OPENROUTER_API_KEY"));
       const newsApiConfigured = !!this.config.get("NEWS_API_KEY");
       
@@ -154,9 +156,15 @@ export class SchedulerService implements OnModuleInit {
       return {
           system: {
               autoGenerationEnabled: this.isAutoGenerationEnabled,
-              youtubeConfigured,
+              youtubeAuthorized: youtubeStatus.success,
+              youtubeChannel: youtubeStatus.channelTitle,
+              youtubeError: youtubeStatus.error,
+              newsApiConnected: newsStatus.success,
+              newsArticleCount: newsStatus.articleCount,
+              newsError: newsStatus.error,
+              aiConnected: aiStatus.success,
+              aiError: aiStatus.error,
               nvidiaConfigured,
-              newsApiConfigured,
           },
           tracking: {
               lastRunTime: this.lastRunTime,

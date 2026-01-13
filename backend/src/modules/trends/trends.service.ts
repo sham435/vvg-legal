@@ -132,9 +132,27 @@ export class TrendsService {
       }
     }
 
-    this.logger.log(`Saved ${savedCount} new trending topics`);
-    return savedCount;
+  this.logger.log(`Saved ${savedCount} new trending topics`);
+  return savedCount;
+}
+
+/**
+ * Diagnostic check to verify News API connectivity.
+ */
+async testNewsApi(): Promise<{ success: boolean; articleCount?: number; error?: string }> {
+  try {
+    const articles = await this.fetchFromNewsAPI();
+    return {
+      success: true,
+      articleCount: articles.length,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.message,
+    };
   }
+}
 
   /**
    * Get best unused trending topic

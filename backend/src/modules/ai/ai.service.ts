@@ -262,11 +262,30 @@ Return only the optimized title, nothing else.`;
       this.logger.log("Image generated successfully");
       return imageUrl;
     } catch (error) {
-      this.logger.warn("Failed to generate image (OpenAI/DALL-E)", error);
       // FALLBACK: Use a high-quality placeholder service
       const fallbackUrl = `https://placehold.co/1024x1792/png?text=${encodeURIComponent(prompt.substring(0, 30))}`;
       this.logger.log(`Using FALLBACK image: ${fallbackUrl}`);
       return fallbackUrl;
+    }
+  }
+
+  /**
+   * Diagnostic check to verify AI connectivity (NVIDIA or OpenRouter).
+   */
+  async checkConnection(): Promise<{ success: boolean; error?: string }> {
+    if (!this.openai) {
+      return { success: false, error: "OpenAI client not initialized" };
+    }
+
+    try {
+      await this.openai.chat.completions.create({
+        model: this.config.get<string>("AI_MODEL", "nvidia/nemotron-nano-9b-v2:free"),
+        messages: [{ role: "user", content: "hi" }],
+        max_tokens: 5,
+      });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
     }
   }
 }

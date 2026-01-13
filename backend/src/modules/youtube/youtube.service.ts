@@ -50,6 +50,34 @@ export class YoutubeService {
   }
 
   /**
+   * Check if the YouTube API is successfully connected and authorized.
+   */
+  async checkConnection(): Promise<{ success: boolean; channelTitle?: string; error?: string }> {
+    if (!this.youtube) {
+      return { success: false, error: "YouTube API not initialized (missing credentials)" };
+    }
+
+    try {
+      const response = await this.youtube.channels.list({
+        part: ["snippet", "statistics"],
+        mine: true,
+      });
+
+      if (response.data.items && response.data.items.length > 0) {
+        const channel = response.data.items[0];
+        return {
+          success: true,
+          channelTitle: channel.snippet.title,
+        };
+      }
+      return { success: false, error: "Authenticated but no channel found" };
+    } catch (error) {
+      this.logger.error("YouTube connection check failed", error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Upload video to YouTube
    */
   async uploadVideo(
