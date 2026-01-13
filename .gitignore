@@ -48,16 +48,13 @@ coverage/
 # Build artifacts
 *.tsbuildinfo
 
-# AI Models & Weights
-backend/cogvideox/models/
-backend/svd/checkpoints/
+# AI Models & Weights (Excluded from Git and Deployment)
+backend/cogvideox/
+backend/svd/
 *.safetensors
 *.pth
 *.pt
 *.dylib
-
-# Virtual Environments
-backend/svd/.pt2/
 .venv/
 env/
 
