@@ -50,6 +50,7 @@ import { MarketingModule } from "./modules/marketing/marketing.module";
           },
     }),
 
+    /*
     // Serve static frontend assets
     ServeStaticModule.forRootAsync({
       useFactory: () => {
@@ -65,6 +66,7 @@ import { MarketingModule } from "./modules/marketing/marketing.module";
         ];
       },
     }),
+    */
 
     // Database
     PrismaModule,
