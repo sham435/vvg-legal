@@ -69,9 +69,9 @@ export class YoutubeService {
 
       const requestBody = {
         snippet: {
-          title,
-          description,
-          tags,
+          title: title.substring(0, 100),
+          description: (description || "").substring(0, 5000),
+          tags: (tags || []).slice(0, 50).map(t => t.substring(0, 500)),
           categoryId: "22", // People & Blogs
           defaultLanguage: "en",
           defaultAudioLanguage: "en",

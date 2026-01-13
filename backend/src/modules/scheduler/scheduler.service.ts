@@ -24,6 +24,8 @@ export class SchedulerService implements OnModuleInit {
     "outputs",
     "videos.json"
   );
+  private lastError: string | null = null;
+  private lastRunTime: Date | null = null;
   // Path to settings file
   private readonly settingsPath = path.join(
     process.cwd(),
@@ -123,7 +125,8 @@ export class SchedulerService implements OnModuleInit {
       running,
       autoGenerationEnabled: this.isAutoGenerationEnabled,
       requiresManualApproval: this.requiresManualApproval,
-      lastRun: new Date(), // Placeholder
+      lastRun: this.lastRunTime,
+      lastError: this.lastError,
       nextRun: running
         ? this.schedulerRegistry
             .getCronJob("hourly-generation")
@@ -139,6 +142,14 @@ export class SchedulerService implements OnModuleInit {
       const youtubeConfigured = !!(this.config.get("YOUTUBE_CLIENT_ID") && this.config.get("YOUTUBE_REFRESH_TOKEN"));
       const nvidiaConfigured = !!(this.config.get("NVIDIA_API_KEY") || this.config.get("OPENROUTER_API_KEY"));
       const newsApiConfigured = !!this.config.get("NEWS_API_KEY");
+      
+      const counts = {
+          pendingVideos: await this.prisma.video.count({ where: { status: 'PENDING' } }),
+          publishedVideos: await this.prisma.video.count({ where: { status: 'PUBLISHED' } }),
+          failedVideos: await this.prisma.video.count({ where: { status: 'FAILED' } }),
+          unusedTopics: unusedTopics.length,
+          totalPublishLogs: await this.prisma.publishLog.count(),
+      };
 
       return {
           system: {
@@ -147,11 +158,11 @@ export class SchedulerService implements OnModuleInit {
               nvidiaConfigured,
               newsApiConfigured,
           },
-          counts: {
-              unusedTopics: unusedTopics.length,
-              totalVideos: await this.prisma.video.count(),
-              totalPublishLogs: await this.prisma.publishLog.count(),
+          tracking: {
+              lastRunTime: this.lastRunTime,
+              lastError: this.lastError,
           },
+          counts,
           latestVideos: latestVideos.map(v => ({ id: v.id, title: v.title, status: v.status })),
       };
   }
@@ -221,6 +232,8 @@ export class SchedulerService implements OnModuleInit {
       };
 
       const result = await this.pipelineService.runPipeline(article);
+      this.lastRunTime = new Date();
+      this.lastError = null;
       this.logger.log(`✅ Automated Pipeline Finished: ${result.type}, Title: ${result.title}`);
       
       if (result.type === 'video' && result.localPath) {
@@ -232,6 +245,7 @@ export class SchedulerService implements OnModuleInit {
       // Mark topic as used
       await this.trendsService.markTopicAsUsed(topic.id);
     } catch (error) {
+      this.lastError = error.message;
       this.logger.error("Hourly generation failed", error);
       await this.notificationsService.sendErrorAlert(
         "Hourly video generation failed",
@@ -311,27 +325,32 @@ export class SchedulerService implements OnModuleInit {
   }
 
   private loadSettings() {
+    // Priority 1: Environment Variables
+    const envAutoGen = this.config.get<string>("ENABLE_AUTO_GENERATION");
+    if (envAutoGen !== undefined) {
+        this.isAutoGenerationEnabled = envAutoGen === "true";
+    }
+
+    const envManualApprove = this.config.get<string>("REQUIRE_MANUAL_APPROVAL");
+    if (envManualApprove !== undefined) {
+        this.requiresManualApproval = envManualApprove === "true";
+    }
+
+    // Priority 2: JSON Settings (only if not already set by ENV)
     try {
       if (fs.existsSync(this.settingsPath)) {
         const data = JSON.parse(fs.readFileSync(this.settingsPath, "utf8"));
         
-        // ENV variables should override stored parameters if they are explicitly set
-        const envAutoGen = this.config.get<string>("ENABLE_AUTO_GENERATION");
-        if (envAutoGen !== undefined) {
-            this.isAutoGenerationEnabled = envAutoGen === "true";
-        } else if (data.enableAutoGeneration !== undefined) {
+        if (envAutoGen === undefined && data.enableAutoGeneration !== undefined) {
           this.isAutoGenerationEnabled = data.enableAutoGeneration;
         }
 
-        const envManualApprove = this.config.get<string>("REQUIRE_MANUAL_APPROVAL");
-        if (envManualApprove !== undefined) {
-            this.requiresManualApproval = envManualApprove === "true";
-        } else if (data.requireManualApproval !== undefined) {
+        if (envManualApprove === undefined && data.requireManualApproval !== undefined) {
           this.requiresManualApproval = data.requireManualApproval;
         }
       }
     } catch (e) {
-      this.logger.error("Failed to load settings.json", e);
+      this.logger.error("Failed to load settings.json (continuing with existing)", e);
     }
   }
 
