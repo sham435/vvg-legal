@@ -43,6 +43,6 @@ jobs:
       - name: Deploy to Railway
         working-directory: ./backend
         run: |
-          npx @railway/cli up --detach --service 2d91a289-318e-440e-9d7f-fb278f87fbb4
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          # Use a specific version of the CLI to avoid regression/corruption issues in CI
+          # Also ensure no conflicting environment variables are present
+          RAILWAY_TOKEN=${{ secrets.RAILWAY_TOKEN }} npx @railway/cli@4.22.0 up --detach --service 2d91a289-318e-440e-9d7f-fb278f87fbb4
