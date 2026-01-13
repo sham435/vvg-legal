@@ -599,8 +599,14 @@ export class VideoService {
       }
 
       // Fallback: If it returns direct URL
+      const videoUrl =
+        response.data.video?.url ||
+        response.data.video_url ||
+        response.data.url ||
+        response.data.assets?.[0]?.url;
+
       return {
-        videoUrl: response.data.video_url || response.data.url,
+        videoUrl,
         duration,
         engine: "cosmos",
       };

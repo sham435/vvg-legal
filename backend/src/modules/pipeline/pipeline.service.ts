@@ -111,7 +111,7 @@ export class PipelineService {
     }
 
     // Step 5: Return result (Video or Article)
-    if (videoUrl) {
+  if (videoUrl || localPath) {
       this.logger.log(`Generated video URL: ${videoUrl}`);
       
       const result: PipelineResult = {
