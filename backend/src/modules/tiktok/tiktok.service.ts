@@ -139,4 +139,115 @@ export class TiktokService {
       throw error;
     }
   }
+
+  /**
+   * Get all trending topics from TikTok
+   */
+  async getAccessToken(
+    code: string,
+    redirectUri: string,
+  ): Promise<{
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
+    refresh_expires_in: number;
+    open_id: string;
+    scope: string;
+  }> {
+    try {
+      const clientKey = this.config.get<string>("TIKTOK_CLIENT_KEY");
+      const clientSecret = this.config.get<string>("TIKTOK_CLIENT_SECRET");
+
+      const params = new URLSearchParams();
+      params.append("client_key", clientKey);
+      params.append("client_secret", clientSecret);
+      params.append("code", code);
+      params.append("grant_type", "authorization_code");
+      params.append("redirect_uri", redirectUri);
+
+      const response = await axios.post(
+        "https://open.tiktokapis.com/v2/oauth/token/",
+        params.toString(),
+        {
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Cache-Control": "no-cache",
+          },
+        },
+      );
+
+      return response.data;
+    } catch (error) {
+      this.logger.error("Failed to get TikTok access token", error.response?.data || error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Refresh TikTok access token
+   */
+  async refreshAccessToken(refreshToken: string): Promise<{
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
+    refresh_expires_in: number;
+    open_id: string;
+    scope: string;
+  }> {
+    try {
+      const clientKey = this.config.get<string>("TIKTOK_CLIENT_KEY");
+      const clientSecret = this.config.get<string>("TIKTOK_CLIENT_SECRET");
+
+      const params = new URLSearchParams();
+      params.append("client_key", clientKey);
+      params.append("client_secret", clientSecret);
+      params.append("grant_type", "refresh_token");
+      params.append("refresh_token", refreshToken);
+
+      const response = await axios.post(
+        "https://open.tiktokapis.com/v2/oauth/token/",
+        params.toString(),
+        {
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Cache-Control": "no-cache",
+          },
+        },
+      );
+
+      return response.data;
+    } catch (error) {
+      this.logger.error("Failed to refresh TikTok access token", error.response?.data || error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Revoke TikTok access token
+   */
+  async revokeAccess(accessToken: string): Promise<void> {
+    try {
+      const clientKey = this.config.get<string>("TIKTOK_CLIENT_KEY");
+      const clientSecret = this.config.get<string>("TIKTOK_CLIENT_SECRET");
+
+      const params = new URLSearchParams();
+      params.append("client_key", clientKey);
+      params.append("client_secret", clientSecret);
+      params.append("token", accessToken);
+
+      await axios.post(
+        "https://open.tiktokapis.com/v2/oauth/revoke/",
+        params.toString(),
+        {
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Cache-Control": "no-cache",
+          },
+        },
+      );
+    } catch (error) {
+      this.logger.error("Failed to revoke TikTok access", error.response?.data || error.message);
+      throw error;
+    }
+  }
 }

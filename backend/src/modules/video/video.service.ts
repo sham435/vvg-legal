@@ -26,7 +26,12 @@ export class VideoService {
     private readonly config: ConfigService,
     private readonly aiService: AiService
   ) {
-    this.videoDbPath = path.join(process.cwd(), "uploads", "videos", "metadata.json");
+    this.videoDbPath = path.join(
+      process.cwd(),
+      "uploads",
+      "videos",
+      "metadata.json"
+    );
   }
 
   private readonly videoDbPath: string;
@@ -76,12 +81,15 @@ export class VideoService {
   /**
    * Main entry point for video generation with fallback logic.
    */
-  async generateVideo(
+  public async generateVideo(
     prompt: string,
     duration: number = 5
   ): Promise<VideoGenerationResult> {
     const priority = this.config
-      .get<string>("VIDEO_ENGINE_PRIORITY", "cosmos,veo,cogvideox,svd,placeholder")
+      .get<string>(
+        "VIDEO_ENGINE_PRIORITY",
+        "cosmos,veo,cogvideox,svd,placeholder"
+      )
       .split(",")
       .map((e) => e.trim());
 
@@ -147,12 +155,12 @@ export class VideoService {
               // We continue even if download fails, but localPath will be missing
             }
           }
-          
+
           // Attach the refined prompt to the result if it was changed
           if (finalPrompt !== prompt) {
             (result as any).refinedPrompt = finalPrompt;
           }
-          
+
           return result;
         }
       } catch (err) {
@@ -383,7 +391,9 @@ export class VideoService {
         };
       } else {
         // Some HF models return binary video data langsung
-        this.logger.warn("HF model did not return video_url, fallback to placeholder");
+        this.logger.warn(
+          "HF model did not return video_url, fallback to placeholder"
+        );
         return this.generateWithPlaceholder(prompt, duration);
       }
     } catch (error) {
@@ -515,30 +525,32 @@ export class VideoService {
     prompt: string,
     duration: number = 5
   ): Promise<VideoGenerationResult> {
-    const apiKey = this.config.get<string>("NVIDIA_API_KEY") || this.config.get<string>("OPENROUTER_API_KEY");
+    const apiKey =
+      this.config.get<string>("NVIDIA_API_KEY") ||
+      this.config.get<string>("OPENROUTER_API_KEY");
     if (!apiKey) {
       throw new Error("NVIDIA_API_KEY or OPENROUTER_API_KEY not configured");
     }
 
     try {
       this.logger.log("Generating video with NVIDIA Cosmos NIM...");
-      
+
       // Using NVIDIA NIM API pattern (OpenAI compatible for some models or specific NIM endpoint)
       // Reference: https://build.nvidia.com/nvidia/cosmos-1_0-predict-text2world-7b
       const response = await axios.post(
         "https://ai.api.nvidia.com/v1/genai/nvidia/cosmos-1_0-predict-text2world-7b",
         {
-          "messages": [
+          messages: [
             {
-              "role": "user",
-              "content": prompt
-            }
+              role: "user",
+              content: prompt,
+            },
           ],
-          "video_settings": {
-              "num_frames": Math.min(Math.floor(duration * 24), 120), // Cosmos often caps at certain frames
-              "height": 704,
-              "width": 1280
-          }
+          video_settings: {
+            num_frames: Math.min(Math.floor(duration * 24), 120), // Cosmos often caps at certain frames
+            height: 704,
+            width: 1280,
+          },
         },
         {
           headers: {
@@ -551,29 +563,31 @@ export class VideoService {
       // NVIDIA Cosmos often returns a base64 string or a preview URL depending on the specific NIM setup.
       // If it returns an ID for polling:
       if (response.data.id) {
-          const operationId = response.data.id;
-          this.logger.log(`Cosmos generation started: ${operationId}`);
-          
-          // Polling logic
-          for (let i = 0; i < 60; i++) {
-              const statusResponse = await axios.get(
-                  `https://ai.api.nvidia.com/v1/genai/status/${operationId}`,
-                  { headers: { Authorization: `Bearer ${apiKey}` } }
-              );
-              
-              if (statusResponse.data.status === "succeeded") {
-                  return {
-                      videoUrl: statusResponse.data.video.url,
-                      duration,
-                      engine: "cosmos",
-                  };
-              }
-              if (statusResponse.data.status === "failed") {
-                  throw new Error(`Cosmos generation failed: ${statusResponse.data.error}`);
-              }
-              await new Promise(r => setTimeout(r, 5000));
+        const operationId = response.data.id;
+        this.logger.log(`Cosmos generation started: ${operationId}`);
+
+        // Polling logic
+        for (let i = 0; i < 60; i++) {
+          const statusResponse = await axios.get(
+            `https://ai.api.nvidia.com/v1/genai/status/${operationId}`,
+            { headers: { Authorization: `Bearer ${apiKey}` } }
+          );
+
+          if (statusResponse.data.status === "succeeded") {
+            return {
+              videoUrl: statusResponse.data.video.url,
+              duration,
+              engine: "cosmos",
+            };
           }
-          throw new Error("Cosmos generation timed out");
+          if (statusResponse.data.status === "failed") {
+            throw new Error(
+              `Cosmos generation failed: ${statusResponse.data.error}`
+            );
+          }
+          await new Promise((r) => setTimeout(r, 5000));
+        }
+        throw new Error("Cosmos generation timed out");
       }
 
       // Fallback: If it returns direct URL
@@ -583,7 +597,10 @@ export class VideoService {
         engine: "cosmos",
       };
     } catch (error) {
-      this.logger.error("NVIDIA Cosmos generation failed", error.response?.data || error.message);
+      this.logger.error(
+        "NVIDIA Cosmos generation failed",
+        error.response?.data || error.message
+      );
       throw error;
     }
   }
@@ -593,7 +610,9 @@ export class VideoService {
    */
   public async generateFromScript(script: any): Promise<VideoGenerationResult> {
     if (script && script.scenes) {
-      const prompts = script.scenes.map((s: any) => s.visualPrompt || s.description);
+      const prompts = script.scenes.map(
+        (s: any) => s.visualPrompt || s.description
+      );
       return this.generateAndMergeScenes(prompts);
     }
     throw new Error("Invalid script format");
@@ -602,7 +621,10 @@ export class VideoService {
   /**
    * Helper to merge audio into video using FFmpeg
    */
-  async mergeAudio(videoPath: string, audioPath: string): Promise<string> {
+  public async mergeAudio(
+    videoPath: string,
+    audioPath: string
+  ): Promise<string> {
     const outputPath = videoPath.replace(".mp4", "_with_audio.mp4");
     this.logger.log(
       `Merging audio: ${videoPath} + ${audioPath} -> ${outputPath}`

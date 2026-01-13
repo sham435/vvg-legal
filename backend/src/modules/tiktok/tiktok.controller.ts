@@ -16,4 +16,26 @@ export class TiktokController {
       message: "Video published to TikTok",
     };
   }
+
+  @Post("oauth/token")
+  @ApiOperation({ summary: "Exchange authorization code for tokens" })
+  async getTokens(@Body() body: { code: string; redirectUri: string }) {
+    return this.tiktokService.getAccessToken(body.code, body.redirectUri);
+  }
+
+  @Post("oauth/refresh")
+  @ApiOperation({ summary: "Refresh access token" })
+  async refreshTokens(@Body() body: { refreshToken: string }) {
+    return this.tiktokService.refreshAccessToken(body.refreshToken);
+  }
+
+  @Post("oauth/revoke")
+  @ApiOperation({ summary: "Revoke access token" })
+  async revokeAccess(@Body() body: { accessToken: string }) {
+    await this.tiktokService.revokeAccess(body.accessToken);
+    return {
+      success: true,
+      message: "Access revoked",
+    };
+  }
 }

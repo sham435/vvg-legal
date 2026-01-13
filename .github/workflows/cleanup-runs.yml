@@ -14,10 +14,9 @@ jobs:
     permissions:
       actions: write
     steps:
-      - name: Delete workflow runs older than 120 hours
+      - name: Delete old runs
         run: |
-          # 120 hours = 5 days
-          # Using gh CLI's built-in filtering to delete runs
-          gh run delete --all --older-than 5d
+          # List all completed runs (including manual ones) older than 120h and delete them
+          gh run list --older-than 120h --limit 1000 --json databaseId -q '.[].databaseId' | xargs -r -I{} gh run delete {}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
