@@ -7,11 +7,8 @@
     "buildEnvironment": "V3"
   },
   "deploy": {
-    "runtime": "V2",
     "numReplicas": 1,
-    "cronSchedule": "0 * * * *",
-    "startCommand": "npm run start:prod",
     "sleepApplication": false,
-    "restartPolicyType": "NEVER"
+    "restartPolicyType": "ALWAYS"
   }
 }
