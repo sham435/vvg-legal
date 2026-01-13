@@ -1,0 +1,9 @@
+node_modules/
+dist/
+cogvideox/
+svd/
+*.log
+uploads/
+outputs/
+.git/
+.github/
