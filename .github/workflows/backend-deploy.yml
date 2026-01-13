@@ -41,8 +41,13 @@ jobs:
         run: npm run build
 
       - name: Deploy to Railway
-        uses: railwayapp/action-up@v1.1.0
-        with:
-          railway_token: ${{ secrets.RAILWAY_TOKEN }}
-          service: "2d91a289-318e-440e-9d7f-fb278f87fbb4"
-          working_directory: "backend"
+        working-directory: ./backend
+        run: |
+          # Sanitize token to remove trailing newlines/whitespace that cause header parsing errors
+          CLEAN_TOKEN=$(echo -n "${{ secrets.RAILWAY_TOKEN }}" | tr -d '\n\r ')
+          if [ -z "$CLEAN_TOKEN" ]; then
+            echo "Error: RAILWAY_TOKEN is not set or is empty"
+            exit 1
+          fi
+          # Use the CLI with the cleaned token
+          RAILWAY_TOKEN=$CLEAN_TOKEN npx @railway/cli@4.22.0 up --detach --service 2d91a289-318e-440e-9d7f-fb278f87fbb4
