@@ -32,6 +32,14 @@ export class VideoService {
       "videos",
       "metadata.json"
     );
+    this.ensureUploadDir();
+  }
+
+  private ensureUploadDir() {
+    const dir = path.join(process.cwd(), "uploads", "videos");
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
   }
 
   private readonly videoDbPath: string;
