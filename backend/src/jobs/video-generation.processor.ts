@@ -32,7 +32,7 @@ export class VideoGenerationProcessor extends WorkerHost {
       job.updateProgress(10);
       this.logger.log("Generating script...");
 
-      const script = await this.aiService.generateScript(topic, description);
+      const script = await this.aiService.generateCinematicScript(topic, description);
 
       // Step 2: Create video record
       job.updateProgress(20);
@@ -51,17 +51,8 @@ export class VideoGenerationProcessor extends WorkerHost {
 
       this.logger.log(`Video record created: ${video.id}`);
 
-      // Step 3: Generate video from first scene (or combine all scenes)
-      job.updateProgress(30);
-      this.logger.log("Generating video with AI...");
-
-      // For simplicity, we'll use the first scene's visual prompt
-      // In production, you might want to combine all scenes or generate individually
-      const mainPrompt = script.scenes[0].visualPrompt;
-      const videoResult = await this.videoService.generateVideo(
-        mainPrompt,
-        script.totalDuration,
-      );
+      // Use the full script object to generate and merge all scenes
+      const videoResult = await this.videoService.generateFromScript(script);
 
       job.updateProgress(70);
 

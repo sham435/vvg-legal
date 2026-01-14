@@ -96,7 +96,7 @@ export class VideoService {
     const priority = this.config
       .get<string>(
         "VIDEO_ENGINE_PRIORITY",
-        "veo,cosmos,cogvideox,svd,placeholder"
+        "cosmos,veo,cogvideox,svd"
       )
       .split(",")
       .map((e) => e.trim());
@@ -111,15 +111,18 @@ export class VideoService {
       }
     }
 
+    const errors: string[] = [];
     for (const engine of priority) {
       const isHealthy = await this.checkEngineHealth(engine);
       if (!isHealthy) {
         this.logger.warn(`Engine ${engine} is unhealthy, skipping`);
+        errors.push(`${engine}: unhealthy`);
         continue;
       }
 
       try {
         let result: VideoGenerationResult | null = null;
+        this.logger.log(`Attempting video generation with engine: ${engine}`);
 
         switch (engine) {
           case "cosmos":
@@ -133,9 +136,6 @@ export class VideoService {
             break;
           case "svd":
             result = await this.generateWithSVD(finalPrompt, duration);
-            break;
-          case "placeholder":
-            result = await this.generateWithPlaceholder(finalPrompt, duration);
             break;
           default:
             this.logger.warn(`Unknown engine: ${engine}`);
@@ -172,14 +172,17 @@ export class VideoService {
           return result;
         }
       } catch (err) {
-        this.logger.warn(`${engine} failed, opening circuit`, err);
+        this.logger.warn(`${engine} failed: ${err.message}`);
+        errors.push(`${engine}: ${err.message}`);
         this.engineHealth.set(engine, false);
         // Optional: auto-reset circuit after 10 mins
         setTimeout(() => this.engineHealth.delete(engine), 10 * 60_000);
       }
     }
 
-    throw new Error("All video generation engines failed");
+    const errorMessage = `All video generation engines failed: ${errors.join(", ")}`;
+    this.logger.error(errorMessage);
+    throw new Error(errorMessage);
   }
 
   /**
@@ -676,8 +679,11 @@ export class VideoService {
     const results: string[] = [];
     const failedScenes: number[] = [];
 
+    this.logger.log(`Generating ${prompts.length} cinematic scenes...`);
+
     for (let i = 0; i < prompts.length; i++) {
       try {
+        this.logger.log(`Scene ${i + 1}/${prompts.length}: ${prompts[i].substring(0, 50)}...`);
         const result = await this.generateVideo(prompts[i], durationPerScene);
         if (result.localPath) {
           results.push(result.localPath);
@@ -695,12 +701,46 @@ export class VideoService {
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
 
-    // Merge logic would go here using ffmpeg merge
-    // For now returning the first available scene
-    return {
-      localPath: results[0],
-      duration: results.length * durationPerScene,
-      engine: "merged",
-    };
+    if (results.length === 0) {
+      throw new Error("Failed to generate any scenes");
+    }
+
+    if (results.length === 1) {
+      return {
+        localPath: results[0],
+        duration: durationPerScene,
+        engine: "single_scene",
+      };
+    }
+
+    // FFmpeg Merge Logic
+    const finalOutputPath = path.join(
+      process.cwd(),
+      "uploads",
+      "videos",
+      `merged_${Date.now()}.mp4`
+    );
+
+    this.logger.log(`Merging ${results.length} scenes into final video...`);
+
+    return new Promise((resolve, reject) => {
+      const mergedVideo = ffmpeg();
+      results.forEach((p) => mergedVideo.input(p));
+
+      mergedVideo
+        .on("error", (err) => {
+          this.logger.error("FFmpeg merge error", err);
+          reject(err);
+        })
+        .on("end", () => {
+          this.logger.log(`Cinematic merge complete: ${finalOutputPath}`);
+          resolve({
+            localPath: finalOutputPath,
+            duration: results.length * durationPerScene,
+            engine: "ffmpeg_merged",
+          });
+        })
+        .mergeToFile(finalOutputPath, path.join(process.cwd(), "uploads", "videos", "temp"));
+    });
   }
 }

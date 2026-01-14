@@ -63,6 +63,48 @@ export class NotificationsService {
     const message = `🚀 **Video Published**\n\nID: ${videoId}\nPlatforms: ${platformList}`;
     await this.sendDiscordNotification(message, 3447003); // Blue
     this.logger.log(`Notification sent: Video published - ${videoId}`);
+
+    // Trigger GitHub Email Pipe
+    const title = platforms.title || videoId; 
+    await this.triggerGitHubNotification(videoId, title);
+  }
+
+  /**
+   * Trigger GitHub Repository Dispatch for Email Notification
+   */
+  private async triggerGitHubNotification(videoId: string, title: string) {
+    const token = this.config.get<string>("GITHUB_NOTIFY_TOKEN");
+    const owner = this.config.get<string>("GITHUB_REPO_OWNER");
+    const repo = this.config.get<string>("GITHUB_REPO_NAME");
+
+    if (!token || !owner || !repo) {
+      this.logger.warn("GitHub notification credentials (token/owner/repo) not fully configured. Skipping email pipe.");
+      return;
+    }
+
+    try {
+      this.logger.log(`Dispatching GitHub notification for video: ${videoId}`);
+      await axios.post(
+        `https://api.github.com/repos/${owner}/${repo}/dispatches`,
+        {
+          event_type: "upload_success",
+          client_payload: {
+            videoId,
+            title,
+            engine: "cinematic-multi-model",
+          },
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/vnd.github.v3+json",
+          },
+        },
+      );
+      this.logger.log("✅ GitHub notification dispatch successful");
+    } catch (error) {
+      this.logger.error("Failed to dispatch GitHub notification", error.response?.data || error.message);
+    }
   }
 
   /**

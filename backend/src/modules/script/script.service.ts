@@ -37,4 +37,19 @@ export class ScriptService {
       return `Here is the latest update: ${article.title}. ${safeDescription} Stay tuned for more coverage.`;
     }
   }
+
+  /**
+   * Generate a full cinematic VideoScript from a news article.
+   */
+  async generateCinematicScriptFromArticle(article: Article): Promise<any> {
+    const topic = article.title;
+    try {
+      return await this.aiService.generateCinematicScript(topic, article.description);
+    } catch (error) {
+      this.logger.error("Failed to generate cinematic script", error);
+      // Fallback to basic generateScript format but wrapped in object
+      const basicScript = await this.aiService.generateScript(topic, article.description);
+      return basicScript;
+    }
+  }
 }

@@ -49,8 +49,8 @@ export class PipelineService {
     }
 
     // Step 2: generate script
-    const script = await this.scriptService.generateScriptFromArticle(article);
-    this.logger.log(`Generated script: ${script}`);
+    const script = await this.scriptService.generateCinematicScriptFromArticle(article);
+    this.logger.log(`Generated cinematic script: ${script.title}`);
 
     // Step 3: generate image (using the article title as prompt)
     let imageUrl: string;
@@ -73,7 +73,8 @@ export class PipelineService {
     let localPath: string | undefined;
 
     try {
-      const videoResult = await this.videoService.generateVideo(script);
+      // Use the full script object for cinematic generation (multiple scenes)
+      const videoResult = await this.videoService.generateFromScript(script);
       videoUrl = videoResult?.videoUrl;
       localPath = videoResult?.localPath;
       
@@ -107,7 +108,8 @@ export class PipelineService {
         "❌ Video generation stage failed. Falling back to Article mode.",
         error.message || error,
       );
-      // Fallback: Proceed without videoUrl
+      // Fallback: Proceed without videoUrl/localPath. 
+      // The code below line 115 will handle this by returning the Article result.
     }
 
     // Step 5: Return result (Video or Article)
