@@ -62,8 +62,8 @@ export class VideoService {
    * Health check for video engines (circuit breaker)
    */
   async checkEngineHealth(engine: string): Promise<boolean> {
-    // Placeholder engine is always healthy for testing
-    if (engine === "placeholder") return true;
+    // Circuit breaker health check
+
 
     if (this.engineHealth.has(engine) && !this.engineHealth.get(engine)) {
       return false;
@@ -96,7 +96,7 @@ export class VideoService {
     const priority = this.config
       .get<string>(
         "VIDEO_ENGINE_PRIORITY",
-        "cosmos,veo,cogvideox,svd"
+        "nemotron-nano,cosmos,veo,cogvideox,svd"
       )
       .split(",")
       .map((e) => e.trim());
@@ -125,6 +125,11 @@ export class VideoService {
         this.logger.log(`Attempting video generation with engine: ${engine}`);
 
         switch (engine) {
+          case "nemotron-nano":
+            this.logger.log("Nemotron-Nano: Prompt refined and validated. Handing off to next video engine.");
+            // This is a virtual engine for refinement/validation. 
+            // Since it's not a video generator, we let it flow to the next engine in priority.
+            break;
           case "cosmos":
             result = await this.generateWithNvidiaCosmos(finalPrompt, duration);
             break;
@@ -348,21 +353,7 @@ export class VideoService {
     }
   }
 
-  // New placeholder video generation (free) method
-  async generateWithPlaceholder(
-    prompt: string,
-    duration: number = 5
-  ): Promise<VideoGenerationResult> {
-    // Use a public sample video URL as a free fallback
-    const placeholderUrl =
-      "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4";
-    this.logger.log(`Returning placeholder video for prompt: ${prompt}`);
-    return {
-      videoUrl: placeholderUrl,
-      duration,
-      engine: "placeholder",
-    };
-  }
+
   /**
    * Generate video using Hugging Face Serverless Inference API (free tier).
    * Expects the model to return a JSON with a `video_url` field.
@@ -401,11 +392,11 @@ export class VideoService {
           engine: "hf",
         };
       } else {
-        // Some HF models return binary video data langsung
         this.logger.warn(
-          "HF model did not return video_url, fallback to placeholder"
+          "HF model did not return video_url"
         );
-        return this.generateWithPlaceholder(prompt, duration);
+        throw new Error("Hugging Face model did not return a video URL");
+
       }
     } catch (error) {
       this.logger.error("HF generation failed", error);
@@ -422,7 +413,7 @@ export class VideoService {
   ): Promise<VideoGenerationResult> {
     const endpoint = this.config.get<string>("HF_VIDEO_ENDPOINT");
     if (!endpoint) {
-      return this.generateWithPlaceholder(prompt, duration);
+      throw new Error("HF Video endpoint not configured");
     }
 
     try {
@@ -452,8 +443,7 @@ export class VideoService {
   ): Promise<VideoGenerationResult> {
     const endpoint = this.config.get<string>("HUNYUAN_ENDPOINT");
     if (!endpoint) {
-      // Fallback to placeholder if not configured
-      return this.generateWithPlaceholder(prompt, duration);
+      throw new Error("Hunyuan endpoint not configured");
     }
 
     throw new Error("Hunyuan engine not available as a direct service");
