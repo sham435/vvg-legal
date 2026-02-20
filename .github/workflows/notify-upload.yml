@@ -1,33 +1,43 @@
-name: Email Notification Pipe
+name: Email Notification on Video Upload
 
 on:
   repository_dispatch:
     types: [upload_success]
 
 jobs:
-  send-email:
+  send-notification:
     runs-on: ubuntu-latest
+    if: github.event.client_payload.videoId != ''
+    
     steps:
-      - name: Send Mail
-        uses: dawidd6/action-send-mail@v3
+      - name: Send Email Notification
+        if: secrets.EMAIL_USERNAME != '' && secrets.SMTP_PASSWORD != ''
+        uses: dawidd6/action-send-mail@v4
         with:
           server_address: smtp.gmail.com
           server_port: 465
           username: ${{ secrets.EMAIL_USERNAME }}
           password: ${{ secrets.SMTP_PASSWORD }}
-          subject: "🚀 Automation Complete: Video Published!"
-          to: "sham435@gmail.com"
+          subject: "🚀 Video Published: ${{ github.event.client_payload.title }}"
+          to: "${{ secrets.NOTIFICATION_EMAIL || 'admin@example.com' }}"
           from: "Viral Video Generator <${{ secrets.EMAIL_USERNAME }}>"
           body: |
-            Great news! A new video has been successfully published to YouTube.
+            Great news! A new video has been successfully published.
 
             Video Details:
             - Title: ${{ github.event.client_payload.title }}
             - Video ID: ${{ github.event.client_payload.videoId }}
+            - Platform: ${{ github.event.client_payload.platform || 'YouTube' }}
             - Engine: ${{ github.event.client_payload.engine }}
+            
+            Published at: ${{ github.event.client_payload.publishedAt || github.event.head_commit.timestamp }}
 
-            You can check the diagnostic suite for live status:
-            https://vvg-production.up.railway.app/api/scheduler/diag
+            View in dashboard:
+            https://vvg-production.up.railway.app/dashboard
 
-            Keep up the great work!
-          priority: high
+          priority: normal
+
+      - name: Log Notification
+        run: |
+          echo "📧 Notification sent for video: ${{ github.event.client_payload.title }}"
+          echo "📹 Video ID: ${{ github.event.client_payload.videoId }}"

@@ -1,0 +1,248 @@
+name: Railway Health Check & Diagnostics
+
+on:
+  schedule:
+    - cron: "0 */6 * * *" # Every 6 hours
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'check'
+        type: choice
+        options:
+          - check
+          - diagnose
+          - fix
+          - restart
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli@latest
+
+      - name: Get Railway Service URL
+        id: get-url
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          # Get the service domain from Railway
+          cd backend
+          DOMAIN=$(railway domain 2>/dev/null || echo "")
+          if [ -z "$DOMAIN" ]; then
+            echo "⚠️ Could not get domain from Railway CLI"
+            echo "domain=" >> $GITHUB_OUTPUT
+          else
+            echo "domain=$DOMAIN" >> $GITHUB_OUTPUT
+            echo "✅ Railway domain: $DOMAIN"
+          fi
+
+      - name: Check Health Endpoint
+        if: steps.get-url.outputs.domain != ''
+        id: health-check
+        run: |
+          DOMAIN="${{ steps.get-url.outputs.domain }}"
+          HEALTH_URL="https://$DOMAIN/health"
+          
+          echo "🔍 Checking health endpoint: $HEALTH_URL"
+          
+          # Try health check with retries
+          for i in 1 2 3; do
+            RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" 2>/dev/null || echo "000")
+            if [ "$RESPONSE" = "200" ]; then
+              echo "✅ Health check PASSED (HTTP $RESPONSE)"
+              echo "status=healthy" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            echo "⚠️ Attempt $i failed (HTTP $RESPONSE), retrying..."
+            sleep 5
+          done
+          
+          echo "❌ Health check FAILED after 3 attempts"
+          echo "status=unhealthy" >> $GITHUB_OUTPUT
+          exit 1
+
+      - name: Check API Endpoints
+        if: steps.health-check.outputs.status == 'healthy'
+        run: |
+          DOMAIN="${{ steps.get-url.outputs.domain }}"
+          
+          # Check API docs
+          DOCS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$DOMAIN/api/v1/docs" 2>/dev/null || echo "000")
+          echo "📚 API Docs: HTTP $DOCS_STATUS"
+          
+          # Check if we can get a simple response
+          API_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://$DOMAIN/api/v1" 2>/dev/null || echo "000")
+          echo "🔌 API Root: HTTP $API_STATUS"
+
+      - name: Diagnose Issues
+        if: failure() || github.event.inputs.action == 'diagnose'
+        run: |
+          echo "🔍 Running diagnostics..."
+          
+          cd backend
+          
+          # Get Railway logs
+          echo "📋 Recent Railway logs:"
+          railway logs --limit 50 2>/dev/null || echo "⚠️ Could not fetch logs"
+          
+          # Check environment variables
+          echo ""
+          echo "🔐 Checking environment variables..."
+          railway variables 2>/dev/null | grep -E "(NODE_ENV|PORT|JWT_SECRET)" || echo "⚠️ Could not list variables"
+          
+          echo ""
+          echo "💡 Common issues:"
+          echo "  1. JWT_SECRET not set or too short (<32 chars)"
+          echo "  2. DATABASE_URL not configured"
+          echo "  3. Build failed due to missing dependencies"
+          echo "  4. Health check timeout"
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Auto-Fix Common Issues
+        if: github.event.inputs.action == 'fix' || (failure() && github.event_name == 'workflow_dispatch')
+        run: |
+          echo "🔧 Attempting automatic fixes..."
+          
+          cd backend
+          
+          # Check if JWT_SECRET is set
+          JWT_SET=$(railway variables get JWT_SECRET 2>/dev/null || echo "")
+          if [ -z "$JWT_SET" ]; then
+            echo "⚠️ JWT_SECRET not set, generating..."
+            NEW_JWT=$(openssl rand -base64 32)
+            railway variables set JWT_SECRET="$NEW_JWT"
+            echo "✅ Set JWT_SECRET"
+          fi
+          
+          # Check if VVG_JWT_SECRET is set
+          VVG_JWT_SET=$(railway variables get VVG_JWT_SECRET 2>/dev/null || echo "")
+          if [ -z "$VVG_JWT_SET" ]; then
+            echo "⚠️ VVG_JWT_SECRET not set, generating..."
+            NEW_VVG_JWT=$(openssl rand -base64 32)
+            railway variables set VVG_JWT_SECRET="$NEW_VVG_JWT"
+            echo "✅ Set VVG_JWT_SECRET"
+          fi
+          
+          # Check if INTERNAL_API_SECRET is set
+          INTERNAL_SET=$(railway variables get INTERNAL_API_SECRET 2>/dev/null || echo "")
+          if [ -z "$INTERNAL_SET" ]; then
+            echo "⚠️ INTERNAL_API_SECRET not set, generating..."
+            NEW_INTERNAL=$(openssl rand -base64 32)
+            railway variables set INTERNAL_API_SECRET="$NEW_INTERNAL"
+            echo "✅ Set INTERNAL_API_SECRET"
+          fi
+          
+          echo "✅ Auto-fix complete"
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Restart Service
+        if: github.event.inputs.action == 'restart' || (failure() && github.event_name == 'schedule')
+        run: |
+          echo "🔄 Restarting Railway service..."
+          cd backend
+          railway up --detach
+          echo "✅ Restart initiated"
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Send Notification
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = '${{ job.status }}';
+            const healthStatus = '${{ steps.health-check.outputs.status }}';
+            const domain = '${{ steps.get-url.outputs.domain }}';
+            
+            const title = status === 'success' 
+              ? '✅ Railway Health Check PASSED' 
+              : '❌ Railway Health Check FAILED';
+            
+            const body = `
+            ## Railway Deployment Status
+            
+            **Status:** ${status}
+            **Health:** ${healthStatus || 'N/A'}
+            **Domain:** ${domain || 'N/A'}
+            
+            ${status !== 'success' ? '⚠️ Action required: Check Railway dashboard and logs' : '✅ All systems operational'}
+            
+            **Timestamp:** ${new Date().toISOString()}
+            `;
+            
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['railway', 'health-check', status === 'success' ? 'healthy' : 'needs-attention']
+            });
+
+  validate-environment:
+    runs-on: ubuntu-latest
+    needs: health-check
+    if: always()
+    steps:
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli@latest
+
+      - name: Validate Environment Variables
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          echo "🔍 Validating Railway environment variables..."
+          
+          cd backend
+          
+          # Required variables
+          REQUIRED_VARS=("JWT_SECRET" "VVG_JWT_SECRET" "INTERNAL_API_SECRET" "NODE_ENV" "PORT")
+          MISSING_VARS=()
+          
+          for var in "${REQUIRED_VARS[@]}"; do
+            VALUE=$(railway variables get "$var" 2>/dev/null || echo "")
+            if [ -z "$VALUE" ]; then
+              echo "❌ $var is NOT set"
+              MISSING_VARS+=("$var")
+            else
+              # Check JWT_SECRET length
+              if [ "$var" = "JWT_SECRET" ] || [ "$var" = "VVG_JWT_SECRET" ]; then
+                LENGTH=${#VALUE}
+                if [ $LENGTH -lt 32 ]; then
+                  echo "⚠️ $var is set but too short ($LENGTH chars, need 32+)"
+                  MISSING_VARS+=("$var")
+                else
+                  echo "✅ $var is set and valid"
+                fi
+              else
+                echo "✅ $var is set"
+              fi
+            fi
+          done
+          
+          # Check for database
+          DB_URL=$(railway variables get DATABASE_URL 2>/dev/null || echo "")
+          if [ -z "$DB_URL" ]; then
+            echo "⚠️ DATABASE_URL not set - Railway should auto-provide this"
+          else
+            echo "✅ DATABASE_URL is set"
+          fi
+          
+          # Summary
+          if [ ${#MISSING_VARS[@]} -eq 0 ]; then
+            echo ""
+            echo "✅ All required environment variables are properly configured!"
+          else
+            echo ""
+            echo "❌ Missing or invalid variables: ${MISSING_VARS[*]}"
+            echo "💡 Run the fix action to auto-generate secrets:"
+            echo "   gh workflow run railway-health-check.yml -f action=fix"
+            exit 1
+          fi

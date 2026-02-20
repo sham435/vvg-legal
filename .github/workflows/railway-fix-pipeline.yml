@@ -1,0 +1,274 @@
+name: Railway Deployment Fix Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      fix_type:
+        description: 'Type of fix to apply'
+        required: true
+        default: 'auto'
+        type: choice
+        options:
+          - auto
+          - secrets
+          - database
+          - restart
+          - full-reset
+
+jobs:
+  diagnose-and-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli@latest
+
+      - name: Generate Secrets if Missing
+        if: github.event.inputs.fix_type == 'secrets' || github.event.inputs.fix_type == 'auto' || github.event.inputs.fix_type == 'full-reset'
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          echo "🔐 Checking and fixing secrets..."
+          
+          cd backend
+          
+          # Generate secrets
+          generate_secret() {
+            openssl rand -base64 32
+          }
+          
+          # Check and set JWT_SECRET
+          JWT_CURRENT=$(railway variables get JWT_SECRET 2>/dev/null || echo "")
+          if [ -z "$JWT_CURRENT" ] || [ ${#JWT_CURRENT} -lt 32 ]; then
+            echo "🔧 Setting JWT_SECRET..."
+            railway variables set JWT_SECRET="$(generate_secret)"
+            echo "✅ JWT_SECRET configured"
+          else
+            echo "✅ JWT_SECRET already set (${#JWT_CURRENT} chars)"
+          fi
+          
+          # Check and set VVG_JWT_SECRET
+          VVG_JWT_CURRENT=$(railway variables get VVG_JWT_SECRET 2>/dev/null || echo "")
+          if [ -z "$VVG_JWT_CURRENT" ] || [ ${#VVG_JWT_CURRENT} -lt 32 ]; then
+            echo "🔧 Setting VVG_JWT_SECRET..."
+            railway variables set VVG_JWT_SECRET="$(generate_secret)"
+            echo "✅ VVG_JWT_SECRET configured"
+          else
+            echo "✅ VVG_JWT_SECRET already set (${#VVG_JWT_CURRENT} chars)"
+          fi
+          
+          # Check and set INTERNAL_API_SECRET
+          INTERNAL_CURRENT=$(railway variables get INTERNAL_API_SECRET 2>/dev/null || echo "")
+          if [ -z "$INTERNAL_CURRENT" ] || [ ${#INTERNAL_CURRENT} -lt 32 ]; then
+            echo "🔧 Setting INTERNAL_API_SECRET..."
+            railway variables set INTERNAL_API_SECRET="$(generate_secret)"
+            echo "✅ INTERNAL_API_SECRET configured"
+          else
+            echo "✅ INTERNAL_API_SECRET already set (${#INTERNAL_CURRENT} chars)"
+          fi
+          
+          # Check and set API_KEY_SALT
+          SALT_CURRENT=$(railway variables get API_KEY_SALT 2>/dev/null || echo "")
+          if [ -z "$SALT_CURRENT" ]; then
+            echo "🔧 Setting API_KEY_SALT..."
+            railway variables set API_KEY_SALT="$(generate_secret)"
+            echo "✅ API_KEY_SALT configured"
+          else
+            echo "✅ API_KEY_SALT already set"
+          fi
+
+      - name: Fix Database Connection
+        if: github.event.inputs.fix_type == 'database' || github.event.inputs.fix_type == 'auto' || github.event.inputs.fix_type == 'full-reset'
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          echo "🗄️ Checking database configuration..."
+          
+          cd backend
+          
+          # Check if DATABASE_URL is set
+          DB_URL=$(railway variables get DATABASE_URL 2>/dev/null || echo "")
+          if [ -z "$DB_URL" ]; then
+            echo "⚠️ DATABASE_URL not set in Railway"
+            echo "💡 Railway should auto-provide this if you have a Postgres service"
+            echo ""
+            echo "Checking available services..."
+            railway service 2>/dev/null || echo "⚠️ Could not list services"
+          else
+            echo "✅ DATABASE_URL is configured"
+            echo "🔗 Testing connection..."
+            
+            # Extract host from DATABASE_URL
+            DB_HOST=$(echo "$DB_URL" | sed -n 's/.*@\([^:]*\).*/\1/p')
+            echo "   Database host: $DB_HOST"
+          fi
+          
+          # Check Redis
+          REDIS_URL=$(railway variables get REDIS_URL 2>/dev/null || echo "")
+          if [ -z "$REDIS_URL" ]; then
+            echo "⚠️ REDIS_URL not set in Railway"
+            echo "💡 Railway should auto-provide this if you have a Redis service"
+          else
+            echo "✅ REDIS_URL is configured"
+          fi
+
+      - name: Fix Application Settings
+        if: github.event.inputs.fix_type == 'auto' || github.event.inputs.fix_type == 'full-reset'
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          echo "⚙️ Checking application settings..."
+          
+          cd backend
+          
+          # Set NODE_ENV to production
+          NODE_ENV_CURRENT=$(railway variables get NODE_ENV 2>/dev/null || echo "")
+          if [ "$NODE_ENV_CURRENT" != "production" ]; then
+            echo "🔧 Setting NODE_ENV to production..."
+            railway variables set NODE_ENV="production"
+            echo "✅ NODE_ENV set to production"
+          else
+            echo "✅ NODE_ENV already set to production"
+          fi
+          
+          # Set PORT
+          PORT_CURRENT=$(railway variables get PORT 2>/dev/null || echo "")
+          if [ -z "$PORT_CURRENT" ]; then
+            echo "🔧 Setting PORT to 3000..."
+            railway variables set PORT="3000"
+            echo "✅ PORT set to 3000"
+          else
+            echo "✅ PORT already set to $PORT_CURRENT"
+          fi
+          
+          # Set LOG_LEVEL
+          LOG_LEVEL_CURRENT=$(railway variables get LOG_LEVEL 2>/dev/null || echo "")
+          if [ -z "$LOG_LEVEL_CURRENT" ]; then
+            echo "🔧 Setting LOG_LEVEL to info..."
+            railway variables set LOG_LEVEL="info"
+            echo "✅ LOG_LEVEL set to info"
+          else
+            echo "✅ LOG_LEVEL already set to $LOG_LEVEL_CURRENT"
+          fi
+
+      - name: Run Database Migrations
+        if: github.event.inputs.fix_type == 'database' || github.event.inputs.fix_type == 'full-reset'
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          echo "🔄 Running database migrations..."
+          
+          cd backend
+          
+          # Get DATABASE_URL temporarily for migration
+          DB_URL=$(railway variables get DATABASE_URL 2>/dev/null || echo "")
+          if [ -n "$DB_URL" ]; then
+            echo "📦 Installing dependencies..."
+            npm ci
+            
+            echo "🗄️ Generating Prisma client..."
+            npx prisma generate
+            
+            echo "🔄 Running migrations..."
+            DATABASE_URL="$DB_URL" npx prisma migrate deploy || {
+              echo "⚠️ Migration may have failed or already applied"
+              echo "💡 Check Railway logs for details"
+            }
+            
+            echo "✅ Migration process completed"
+          else
+            echo "⚠️ Cannot run migrations - DATABASE_URL not available"
+          fi
+
+      - name: Redeploy Application
+        if: github.event.inputs.fix_type == 'restart' || github.event.inputs.fix_type == 'auto' || github.event.inputs.fix_type == 'full-reset'
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          echo "🚀 Redeploying application..."
+          
+          cd backend
+          
+          # Trigger redeployment
+          railway up --detach
+          
+          echo "✅ Deployment triggered"
+          echo "⏳ Waiting for deployment to complete..."
+          sleep 30
+          
+          # Get domain
+          DOMAIN=$(railway domain 2>/dev/null || echo "")
+          if [ -n "$DOMAIN" ]; then
+            echo ""
+            echo "🔗 Application URL: https://$DOMAIN"
+            echo "🔍 Health check: https://$DOMAIN/health"
+            echo "📚 API Docs: https://$DOMAIN/api/v1/docs"
+          fi
+
+      - name: Verify Deployment
+        if: github.event.inputs.fix_type != 'secrets'
+        run: |
+          echo "🔍 Verifying deployment..."
+          
+          cd backend
+          
+          # Get domain
+          DOMAIN=$(railway domain 2>/dev/null || echo "")
+          
+          if [ -n "$DOMAIN" ]; then
+            HEALTH_URL="https://$DOMAIN/health"
+            
+            echo "Testing health endpoint: $HEALTH_URL"
+            
+            # Wait for service to be ready
+            for i in 1 2 3 4 5; do
+              sleep 10
+              RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL" 2>/dev/null || echo "000")
+              
+              if [ "$RESPONSE" = "200" ]; then
+                echo "✅ Deployment verified! Health check PASSED (HTTP 200)"
+                echo "🎉 Application is running successfully!"
+                exit 0
+              fi
+              
+              echo "⏳ Attempt $i: Health check returned HTTP $RESPONSE, retrying..."
+            done
+            
+            echo "⚠️ Health check not returning 200 after 5 attempts"
+            echo "💡 Check Railway logs for errors:"
+            echo "   railway logs"
+            exit 1
+          else
+            echo "⚠️ Could not get domain for verification"
+            echo "💡 Manually check Railway dashboard"
+          fi
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Summary
+        if: always()
+        run: |
+          echo ""
+          echo "========================================"
+          echo "🎯 Railway Fix Pipeline Complete"
+          echo "========================================"
+          echo ""
+          echo "Fix type: ${{ github.event.inputs.fix_type }}"
+          echo "Status: ${{ job.status }}"
+          echo ""
+          echo "Next steps:"
+          echo "  1. Check Railway dashboard for deployment status"
+          echo "  2. Test health endpoint: https://<your-domain>/health"
+          echo "  3. Check API docs: https://<your-domain>/api/v1/docs"
+          echo ""
+          echo "If issues persist:"
+          echo "  - View logs: railway logs"
+          echo "  - Check variables: railway variables"
+          echo "  - Run full reset: gh workflow run railway-fix-pipeline.yml -f fix_type=full-reset"

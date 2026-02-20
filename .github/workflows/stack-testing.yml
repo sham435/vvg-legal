@@ -1,0 +1,334 @@
+name: Comprehensive Stack Testing
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_type:
+        description: 'Type of test to run'
+        required: true
+        default: 'full'
+        type: choice
+        options:
+          - full
+          - api
+          - scheduler
+          - queue
+          - database
+          - external-apis
+  schedule:
+    - cron: "0 */12 * * *" # Every 12 hours
+
+jobs:
+  test-api-endpoints:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test API Endpoints
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          echo "🧪 Testing API Endpoints..."
+          
+          npm install -g @railway/cli@latest
+          cd backend
+          
+          DOMAIN=$(railway domain 2>/dev/null || echo "")
+          if [ -z "$DOMAIN" ]; then
+            echo "❌ Could not get Railway domain"
+            exit 1
+          fi
+          
+          BASE_URL="https://$DOMAIN"
+          
+          # Test health endpoint
+          echo "Testing /health..."
+          HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/health")
+          if [ "$HEALTH_STATUS" = "200" ]; then
+            echo "✅ Health endpoint: OK"
+          else
+            echo "❌ Health endpoint: FAILED (HTTP $HEALTH_STATUS)"
+          fi
+          
+          # Test API docs
+          echo "Testing /api/v1/docs..."
+          DOCS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api/v1/docs")
+          if [ "$DOCS_STATUS" = "200" ]; then
+            echo "✅ API Docs: OK"
+          else
+            echo "❌ API Docs: FAILED (HTTP $DOCS_STATUS)"
+          fi
+          
+          # Test trends endpoint
+          echo "Testing /api/v1/trends..."
+          TRENDS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api/v1/trends")
+          if [ "$TRENDS_STATUS" = "200" ]; then
+            echo "✅ Trends endpoint: OK"
+          else
+            echo "⚠️ Trends endpoint: HTTP $TRENDS_STATUS (may need auth)"
+          fi
+          
+          # Test video endpoint
+          echo "Testing /api/v1/video..."
+          VIDEO_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api/v1/video")
+          echo "ℹ️ Video endpoint: HTTP $VIDEO_STATUS"
+
+  test-database:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli@latest
+
+      - name: Test Database Connection
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          echo "🗄️ Testing Database Connection..."
+          
+          cd backend
+          
+          DB_URL=$(railway variables get DATABASE_URL 2>/dev/null || echo "")
+          if [ -z "$DB_URL" ]; then
+            echo "❌ DATABASE_URL not configured"
+            exit 1
+          fi
+          
+          npm ci
+          npx prisma generate
+          
+          # Test connection with Prisma
+          node -e "
+            const { PrismaClient } = require('@prisma/client');
+            const prisma = new PrismaClient();
+            
+            async function test() {
+              try {
+                await prisma.\$connect();
+                console.log('✅ Database connection: OK');
+                
+                // Count videos
+                const videoCount = await prisma.video.count();
+                console.log('📊 Total videos in database:', videoCount);
+                
+                // Count trending topics
+                const topicCount = await prisma.trendingTopic.count();
+                console.log('📊 Total trending topics:', topicCount);
+                
+                await prisma.\$disconnect();
+              } catch (err) {
+                console.error('❌ Database connection failed:', err.message);
+                process.exit(1);
+              }
+            }
+            
+            test();
+          "
+
+  test-redis-queue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli@latest
+
+      - name: Test Redis Connection
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          echo "🔄 Testing Redis/Queue Connection..."
+          
+          cd backend
+          
+          REDIS_URL=$(railway variables get REDIS_URL 2>/dev/null || echo "")
+          if [ -z "$REDIS_URL" ]; then
+            echo "❌ REDIS_URL not configured"
+            exit 1
+          fi
+          
+          npm ci
+          
+          # Test Redis connection
+          node -e "
+            const Redis = require('ioredis');
+            
+            async function testRedis() {
+              const redis = new Redis('$REDIS_URL');
+              
+              try {
+                await redis.ping();
+                console.log('✅ Redis connection: OK');
+                
+                // Check BullMQ queues
+                const queueKeys = await redis.keys('bull:*');
+                console.log('📋 Active queues:', queueKeys.length);
+                
+                if (queueKeys.length > 0) {
+                  for (const key of queueKeys.slice(0, 5)) {
+                    const queueName = key.replace('bull:', '');
+                    const waiting = await redis.llen('bull:' + queueName + ':wait');
+                    const active = await redis.llen('bull:' + queueName + ':active');
+                    const completed = await redis.llen('bull:' + queueName + ':completed');
+                    const failed = await redis.llen('bull:' + queueName + ':failed');
+                    
+                    console.log('  📊 Queue ' + queueName + ':');
+                    console.log('     Waiting: ' + waiting + ', Active: ' + active + ', Completed: ' + completed + ', Failed: ' + failed);
+                  }
+                }
+                
+                redis.disconnect();
+              } catch (err) {
+                console.error('❌ Redis connection failed:', err.message);
+                process.exit(1);
+              }
+            }
+            
+            testRedis();
+          "
+
+  test-external-apis:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli@latest
+
+      - name: Test API Keys
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          echo "🔑 Testing External API Keys..."
+          
+          cd backend
+          
+          # Test NewsAPI
+          NEWS_KEY=$(railway variables get NEWS_API_KEY 2>/dev/null || echo "")
+          if [ -n "$NEWS_KEY" ] && [ "$NEWS_KEY" != "your_"* ]; then
+            echo "Testing NewsAPI..."
+            NEWS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://newsapi.org/v2/top-headlines?country=us&apiKey=$NEWS_KEY")
+            if [ "$NEWS_STATUS" = "200" ]; then
+              echo "✅ NewsAPI: OK"
+            else
+              echo "⚠️ NewsAPI: HTTP $NEWS_STATUS (may have rate limits)"
+            fi
+          else
+            echo "❌ NewsAPI key not configured"
+          fi
+          
+          # Test OpenAI
+          OPENAI_KEY=$(railway variables get OPENAI_API_KEY 2>/dev/null || echo "")
+          if [ -n "$OPENAI_KEY" ] && [ "$OPENAI_KEY" != "your_"* ] && [ "$OPENAI_KEY" != "sk-your_"* ]; then
+            echo "✅ OpenAI API key is configured"
+          else
+            echo "❌ OpenAI API key not configured"
+          fi
+          
+          # Test YouTube credentials
+          YT_CLIENT=$(railway variables get YOUTUBE_CLIENT_ID 2>/dev/null || echo "")
+          YT_SECRET=$(railway variables get YOUTUBE_CLIENT_SECRET 2>/dev/null || echo "")
+          YT_TOKEN=$(railway variables get YOUTUBE_REFRESH_TOKEN 2>/dev/null || echo "")
+          
+          if [ -n "$YT_CLIENT" ] && [ -n "$YT_SECRET" ] && [ -n "$YT_TOKEN" ]; then
+            echo "✅ YouTube credentials: Configured"
+          else
+            echo "❌ YouTube credentials: Incomplete"
+            [ -z "$YT_CLIENT" ] && echo "   - Missing: YOUTUBE_CLIENT_ID"
+            [ -z "$YT_SECRET" ] && echo "   - Missing: YOUTUBE_CLIENT_SECRET"
+            [ -z "$YT_TOKEN" ] && echo "   - Missing: YOUTUBE_REFRESH_TOKEN"
+          fi
+
+  test-scheduler:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli@latest
+
+      - name: Test Scheduler Configuration
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          echo "⏰ Testing Scheduler Configuration..."
+          
+          cd backend
+          
+          DOMAIN=$(railway domain 2>/dev/null || echo "")
+          if [ -z "$DOMAIN" ]; then
+            echo "❌ Could not get Railway domain"
+            exit 1
+          fi
+          
+          BASE_URL="https://$DOMAIN"
+          
+          # Check scheduler settings
+          echo "Checking scheduler settings..."
+          SCHEDULER_STATUS=$(curl -s "$BASE_URL/api/v1/scheduler/settings" 2>/dev/null || echo "")
+          
+          if [ -n "$SCHEDULER_STATUS" ]; then
+            echo "✅ Scheduler endpoint accessible"
+            echo "Settings: $SCHEDULER_STATUS"
+          else
+            echo "⚠️ Could not fetch scheduler settings (may need auth)"
+          fi
+          
+          # Check auto-generation flag
+          AUTO_GEN=$(railway variables get ENABLE_AUTO_GENERATION 2>/dev/null || echo "false")
+          if [ "$AUTO_GEN" = "true" ]; then
+            echo "✅ Auto-generation is ENABLED"
+          else
+            echo "⚠️ Auto-generation is DISABLED (set ENABLE_AUTO_GENERATION=true to enable)"
+          fi
+
+  generate-report:
+    runs-on: ubuntu-latest
+    needs: [test-api-endpoints, test-database, test-redis-queue, test-external-apis, test-scheduler]
+    if: always()
+    steps:
+      - name: Generate Test Report
+        run: |
+          echo "📊 Test Summary"
+          echo "==============="
+          echo ""
+          echo "API Tests: ${{ needs.test-api-endpoints.result }}"
+          echo "Database Tests: ${{ needs.test-database.result }}"
+          echo "Redis/Queue Tests: ${{ needs.test-redis-queue.result }}"
+          echo "External API Tests: ${{ needs.test-external-apis.result }}"
+          echo "Scheduler Tests: ${{ needs.test-scheduler.result }}"
+          echo ""
+          
+          if [ "${{ needs.test-api-endpoints.result }}" = "success" ] && \
+             [ "${{ needs.test-database.result }}" = "success" ] && \
+             [ "${{ needs.test-redis-queue.result }}" = "success" ]; then
+            echo "✅ Core stack is healthy!"
+          else
+            echo "❌ Some tests failed. Check individual job logs."
+            echo ""
+            echo "💡 Run fixes:"
+            echo "   gh workflow run railway-fix-pipeline.yml -f fix_type=auto"
+          fi

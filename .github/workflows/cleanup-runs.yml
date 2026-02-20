@@ -1,22 +1,33 @@
-name: Cleanup Workflow Runs
+name: Cleanup Old Workflow Runs
 
 on:
-  push:
-    paths:
-      - ".github/workflows/cleanup-runs.yml"
   schedule:
-    - cron: "0 * * * *" # Hourly
-  workflow_dispatch: # Allow manual trigger
+    - cron: "0 0 * * 0" # Weekly on Sunday at midnight
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'Delete runs older than X days'
+        required: true
+        default: '30'
+        type: string
 
 jobs:
   cleanup:
     runs-on: ubuntu-latest
     permissions:
       actions: write
+      contents: read
+    
     steps:
-      - name: Delete old runs
+      - name: Delete old workflow runs
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          retain_days: ${{ github.event.inputs.days || 30 }}
+          keep_minimum_runs: 10
+
+      - name: Cleanup Summary
         run: |
-          # List all completed runs (including manual ones) older than 120h and delete them
-          gh run list --older-than 120h --limit 1000 --json databaseId -q '.[].databaseId' | xargs -r -I{} gh run delete {}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          echo "✅ Cleanup completed"
+          echo "🗑️ Deleted runs older than ${{ github.event.inputs.days || 30 }} days"

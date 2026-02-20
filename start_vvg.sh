@@ -15,6 +15,9 @@ echo "============================================="
 echo "   🚀 Viral Video Generator - Access Stack   "
 echo "============================================="
 
+# Create logs directory if it doesn't exist
+mkdir -p logs
+
 # 1. Start Python AI Server
 echo "🐍 [1/3] Starting CogVideoX AI Server..."
 cd backend/cogvideox

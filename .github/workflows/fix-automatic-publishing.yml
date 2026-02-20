@@ -1,0 +1,353 @@
+name: Fix Automatic Publishing
+
+on:
+  workflow_dispatch:
+    inputs:
+      fix_type:
+        description: 'What to fix'
+        required: true
+        default: 'auto'
+        type: choice
+        options:
+          - auto
+          - scheduler
+          - queue
+          - youtube-auth
+          - enable-auto-generation
+
+jobs:
+  diagnose-publishing:
+    runs-on: ubuntu-latest
+    outputs:
+      issues: ${{ steps.diagnose.outputs.issues }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli@latest
+
+      - name: Diagnose Publishing Issues
+        id: diagnose
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          echo "🔍 Diagnosing why videos are not publishing automatically..."
+          echo ""
+          
+          cd backend
+          
+          ISSUES=""
+          
+          # Check 1: Auto-generation enabled?
+          echo "Check 1: Auto-generation setting..."
+          AUTO_GEN=$(railway variables get ENABLE_AUTO_GENERATION 2>/dev/null || echo "false")
+          if [ "$AUTO_GEN" != "true" ]; then
+            echo "❌ ISSUE: ENABLE_AUTO_GENERATION is not set to 'true'"
+            echo "   Current value: $AUTO_GEN"
+            ISSUES="${ISSUES}auto-generation-disabled,"
+          else
+            echo "✅ Auto-generation is enabled"
+          fi
+          echo ""
+          
+          # Check 2: Scheduler interval
+          echo "Check 2: Scheduler interval..."
+          INTERVAL=$(railway variables get GENERATION_INTERVAL_HOURS 2>/dev/null || echo "1")
+          echo "   Current interval: $INTERVAL hours"
+          
+          # Check 3: YouTube credentials
+          echo "Check 3: YouTube credentials..."
+          YT_CLIENT=$(railway variables get YOUTUBE_CLIENT_ID 2>/dev/null || echo "")
+          YT_SECRET=$(railway variables get YOUTUBE_CLIENT_SECRET 2>/dev/null || echo "")
+          YT_TOKEN=$(railway variables get YOUTUBE_REFRESH_TOKEN 2>/dev/null || echo "")
+          YT_CHANNEL=$(railway variables get YOUTUBE_CHANNEL_ID 2>/dev/null || echo "")
+          
+          if [ -z "$YT_CLIENT" ] || [ -z "$YT_SECRET" ] || [ -z "$YT_TOKEN" ]; then
+            echo "❌ ISSUE: YouTube credentials incomplete"
+            [ -z "$YT_CLIENT" ] && echo "   - Missing YOUTUBE_CLIENT_ID"
+            [ -z "$YT_SECRET" ] && echo "   - Missing YOUTUBE_CLIENT_SECRET"
+            [ -z "$YT_TOKEN" ] && echo "   - Missing YOUTUBE_REFRESH_TOKEN"
+            ISSUES="${ISSUES}youtube-credentials-missing,"
+          else
+            echo "✅ YouTube credentials configured"
+          fi
+          
+          if [ -z "$YT_CHANNEL" ]; then
+            echo "⚠️ WARNING: YOUTUBE_CHANNEL_ID not set"
+            ISSUES="${ISSUES}youtube-channel-missing,"
+          fi
+          echo ""
+          
+          # Check 4: API Keys
+          echo "Check 4: Required API keys..."
+          NEWS_KEY=$(railway variables get NEWS_API_KEY 2>/dev/null || echo "")
+          OPENAI_KEY=$(railway variables get OPENAI_API_KEY 2>/dev/null || echo "")
+          
+          if [ -z "$NEWS_KEY" ] || [ "$NEWS_KEY" = "your_"* ]; then
+            echo "❌ ISSUE: NEWS_API_KEY not configured"
+            ISSUES="${ISSUES}newsapi-missing,"
+          else
+            echo "✅ NewsAPI key configured"
+          fi
+          
+          if [ -z "$OPENAI_KEY" ] || [ "$OPENAI_KEY" = "your_"* ] || [ "$OPENAI_KEY" = "sk-your_"* ]; then
+            echo "❌ ISSUE: OPENAI_API_KEY not configured"
+            ISSUES="${ISSUES}openai-missing,"
+          else
+            echo "✅ OpenAI key configured"
+          fi
+          echo ""
+          
+          # Check 5: Video generation services
+          echo "Check 5: Video generation services..."
+          LUMA_KEY=$(railway variables get LUMA_API_KEY 2>/dev/null || echo "")
+          RUNWAY_KEY=$(railway variables get RUNWAY_API_KEY 2>/dev/null || echo "")
+          
+          if [ -z "$LUMA_KEY" ] && [ -z "$RUNWAY_KEY" ]; then
+            echo "❌ ISSUE: No video generation service configured"
+            echo "   Set LUMA_API_KEY or RUNWAY_API_KEY"
+            ISSUES="${ISSUES}video-service-missing,"
+          else
+            echo "✅ Video generation service configured"
+          fi
+          echo ""
+          
+          # Check 6: Queue/Redis
+          echo "Check 6: Queue system..."
+          REDIS_URL=$(railway variables get REDIS_URL 2>/dev/null || echo "")
+          if [ -z "$REDIS_URL" ]; then
+            echo "❌ ISSUE: REDIS_URL not configured"
+            ISSUES="${ISSUES}redis-missing,"
+          else
+            echo "✅ Redis configured"
+          fi
+          echo ""
+          
+          # Check 7: Recent logs
+          echo "Check 7: Recent errors in logs..."
+          railway logs --limit 50 2>/dev/null | grep -i "error\|fail\|exception" | head -10 || echo "   No recent errors found"
+          echo ""
+          
+          # Summary
+          echo "========================================"
+          echo "📊 DIAGNOSIS SUMMARY"
+          echo "========================================"
+          
+          if [ -z "$ISSUES" ]; then
+            echo "✅ No issues found! Automatic publishing should be working."
+            echo ""
+            echo "If videos still aren't publishing:"
+            echo "  1. Check if scheduler is actually running"
+            echo "  2. Check queue status for pending jobs"
+            echo "  3. Verify YouTube refresh token hasn't expired"
+          else
+            echo "❌ Issues found: ${ISSUES%,}"
+            echo ""
+            echo "Run automated fixes:"
+            echo "  gh workflow run fix-automatic-publishing.yml -f fix_type=auto"
+          fi
+          
+          echo "issues=$ISSUES" >> $GITHUB_OUTPUT
+
+  fix-auto-generation:
+    runs-on: ubuntu-latest
+    needs: diagnose-publishing
+    if: contains(needs.diagnose-publishing.outputs.issues, 'auto-generation-disabled') || github.event.inputs.fix_type == 'enable-auto-generation' || github.event.inputs.fix_type == 'auto'
+    steps:
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli@latest
+
+      - name: Enable Auto-Generation
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          echo "🔧 Enabling automatic video generation..."
+          
+          cd backend
+          
+          railway variables set ENABLE_AUTO_GENERATION="true"
+          echo "✅ ENABLE_AUTO_GENERATION set to true"
+          
+          railway variables set GENERATION_INTERVAL_HOURS="1"
+          echo "✅ GENERATION_INTERVAL_HOURS set to 1"
+          
+          railway variables set REQUIRE_MANUAL_APPROVAL="false"
+          echo "✅ REQUIRE_MANUAL_APPROVAL set to false (auto-publish)"
+          
+          echo ""
+          echo "📝 Configuration updated:"
+          echo "  - Videos will generate every 1 hour"
+          echo "  - Videos will auto-publish without approval"
+
+  fix-youtube-auth:
+    runs-on: ubuntu-latest
+    needs: diagnose-publishing
+    if: contains(needs.diagnose-publishing.outputs.issues, 'youtube-credentials-missing') || github.event.inputs.fix_type == 'youtube-auth'
+    steps:
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli@latest
+
+      - name: Guide for YouTube Setup
+        run: |
+          echo "📺 YouTube Authentication Setup Required"
+          echo "========================================="
+          echo ""
+          echo "You need to set up YouTube OAuth2 credentials:"
+          echo ""
+          echo "1. Go to Google Cloud Console:"
+          echo "   https://console.cloud.google.com/apis/credentials"
+          echo ""
+          echo "2. Create OAuth2 credentials:"
+          echo "   - Application type: Web application"
+          echo "   - Authorized redirect URIs:"
+          echo "     https://your-railway-domain.up.railway.app/auth/youtube/callback"
+          echo ""
+          echo "3. Get refresh token:"
+          echo "   node backend/scripts/get-youtube-token.js"
+          echo ""
+          echo "4. Set these variables in Railway:"
+          echo "   railway variables set YOUTUBE_CLIENT_ID='your-client-id'"
+          echo "   railway variables set YOUTUBE_CLIENT_SECRET='your-client-secret'"
+          echo "   railway variables set YOUTUBE_REFRESH_TOKEN='your-refresh-token'"
+          echo "   railway variables set YOUTUBE_CHANNEL_ID='your-channel-id'"
+          echo ""
+          echo "⚠️ YouTube refresh tokens expire after 7 days if the app is in testing mode."
+          echo "   Publish your app in Google Cloud Console to get long-lived tokens."
+
+  fix-missing-apis:
+    runs-on: ubuntu-latest
+    needs: diagnose-publishing
+    if: contains(needs.diagnose-publishing.outputs.issues, 'newsapi-missing') || contains(needs.diagnose-publishing.outputs.issues, 'openai-missing') || contains(needs.diagnose-publishing.outputs.issues, 'video-service-missing') || github.event.inputs.fix_type == 'auto'
+    steps:
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli@latest
+
+      - name: Guide for API Keys
+        run: |
+          echo "🔑 API Keys Setup Guide"
+          echo "======================="
+          echo ""
+          
+          # Check what's missing
+          cd backend
+          
+          NEWS_KEY=$(railway variables get NEWS_API_KEY 2>/dev/null || echo "")
+          if [ -z "$NEWS_KEY" ] || [ "$NEWS_KEY" = "your_"* ]; then
+            echo "❌ NEWS_API_KEY missing"
+            echo "   Get free key: https://newsapi.org/register"
+            echo "   Then run: railway variables set NEWS_API_KEY='your-key'"
+            echo ""
+          fi
+          
+          OPENAI_KEY=$(railway variables get OPENAI_API_KEY 2>/dev/null || echo "")
+          if [ -z "$OPENAI_KEY" ] || [ "$OPENAI_KEY" = "your_"* ] || [ "$OPENAI_KEY" = "sk-your_"* ]; then
+            echo "❌ OPENAI_API_KEY missing"
+            echo "   Get key: https://platform.openai.com/api-keys"
+            echo "   Then run: railway variables set OPENAI_API_KEY='sk-...'"
+            echo ""
+          fi
+          
+          LUMA_KEY=$(railway variables get LUMA_API_KEY 2>/dev/null || echo "")
+          if [ -z "$LUMA_KEY" ] || [ "$LUMA_KEY" = "your_"* ]; then
+            echo "❌ LUMA_API_KEY missing"
+            echo "   Get key: https://lumalabs.ai/ (paid, ~$0.50/video)"
+            echo "   Then run: railway variables set LUMA_API_KEY='your-key'"
+            echo ""
+          fi
+
+  restart-services:
+    runs-on: ubuntu-latest
+    needs: [fix-auto-generation]
+    if: always() && (needs.fix-auto-generation.result == 'success' || github.event.inputs.fix_type == 'auto')
+    steps:
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli@latest
+
+      - name: Redeploy Application
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          echo "🚀 Redeploying application with new settings..."
+          
+          cd backend
+          railway up --detach
+          
+          echo "✅ Redeployment initiated"
+          echo "⏳ Waiting for service to start..."
+          sleep 30
+          
+          DOMAIN=$(railway domain 2>/dev/null || echo "")
+          if [ -n "$DOMAIN" ]; then
+            echo ""
+            echo "🔗 Application: https://$DOMAIN"
+            echo "📚 API Docs: https://$DOMAIN/api/v1/docs"
+          fi
+
+  test-manual-trigger:
+    runs-on: ubuntu-latest
+    needs: restart-services
+    if: always()
+    steps:
+      - name: Test Manual Video Generation
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          echo "🧪 Testing manual video generation trigger..."
+          
+          cd backend
+          
+          DOMAIN=$(railway domain 2>/dev/null || echo "")
+          if [ -z "$DOMAIN" ]; then
+            echo "❌ Could not get domain"
+            exit 1
+          fi
+          
+          BASE_URL="https://$DOMAIN"
+          
+          echo ""
+          echo "You can manually trigger video generation:"
+          echo "  POST $BASE_URL/api/v1/scheduler/trigger"
+          echo ""
+          echo "Or visit the dashboard to trigger manually:"
+          echo "  https://$DOMAIN/dashboard"
+          echo ""
+          echo "Next automatic generation will occur based on GENERATION_INTERVAL_HOURS setting"
+
+  summary:
+    runs-on: ubuntu-latest
+    needs: [diagnose-publishing, fix-auto-generation, restart-services]
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo ""
+          echo "========================================"
+          echo "🎯 Automatic Publishing Fix Complete"
+          echo "========================================"
+          echo ""
+          echo "Diagnosis: ${{ needs.diagnose-publishing.result }}"
+          echo "Fix Applied: ${{ needs.fix-auto-generation.result }}"
+          echo "Restart: ${{ needs.restart-services.result }}"
+          echo ""
+          
+          if [ "${{ needs.fix-auto-generation.result }}" = "success" ]; then
+            echo "✅ Automatic video generation is now ENABLED"
+            echo ""
+            echo "📅 Schedule:"
+            echo "  - Videos will generate every 1 hour"
+            echo "  - They will auto-publish to YouTube"
+            echo ""
+            echo "🔍 Monitor:"
+            echo "  - Check Railway logs: railway logs"
+            echo "  - Check queue status in dashboard"
+            echo "  - Monitor YouTube Studio for new videos"
+          else
+            echo "⚠️ Some fixes could not be applied automatically"
+            echo "   Run: gh workflow run fix-automatic-publishing.yml -f fix_type=auto"
+          fi
