@@ -1,0 +1,121 @@
+name: Fix YouTube Publishing
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to take'
+        required: true
+        default: 'diagnose'
+        type: choice
+        options:
+          - diagnose
+          - fix
+          - test-youtube
+          - manual-trigger
+          - full-reset
+
+jobs:
+  diagnose-why-not-publishing:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli@latest
+
+      - name: Deep Diagnostics - Why No Videos Published
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          echo "🔍 DEEP DIAGNOSTICS: Why aren't videos publishing to YouTube?"
+          echo "============================================================"
+          echo ""
+          
+          cd backend
+          
+          CRITICAL_ISSUES=""
+          
+          # Check auto-generation
+          AUTO_GEN=$(railway variables get ENABLE_AUTO_GENERATION 2>/dev/null || echo "")
+          if [ "$AUTO_GEN" != "true" ]; then
+            echo "❌ CRITICAL: ENABLE_AUTO_GENERATION is '$AUTO_GEN' (should be 'true')"
+            CRITICAL_ISSUES="${CRITICAL_ISSUES}auto-generation-disabled,"
+          else
+            echo "✅ Auto-generation is enabled"
+          fi
+          
+          # Check YouTube credentials
+          YT_CLIENT=$(railway variables get YOUTUBE_CLIENT_ID 2>/dev/null || echo "")
+          YT_SECRET=$(railway variables get YOUTUBE_CLIENT_SECRET 2>/dev/null || echo "")
+          YT_TOKEN=$(railway variables get YOUTUBE_REFRESH_TOKEN 2>/dev/null || echo "")
+          
+          if [ -z "$YT_CLIENT" ] || [ -z "$YT_SECRET" ] || [ -z "$YT_TOKEN" ]; then
+            echo "❌ CRITICAL: YouTube OAuth credentials incomplete"
+            CRITICAL_ISSUES="${CRITICAL_ISSUES}youtube-credentials-missing,"
+          else
+            echo "✅ YouTube credentials configured"
+          fi
+          
+          # Check API keys
+          NEWS_KEY=$(railway variables get NEWS_API_KEY 2>/dev/null || echo "")
+          OPENAI_KEY=$(railway variables get OPENAI_API_KEY 2>/dev/null || echo "")
+          
+          if [ -z "$NEWS_KEY" ] || [ -z "$OPENAI_KEY" ]; then
+            echo "❌ CRITICAL: API keys missing"
+            CRITICAL_ISSUES="${CRITICAL_ISSUES}api-keys-missing,"
+          else
+            echo "✅ API keys configured"
+          fi
+          
+          # Summary
+          if [ -n "$CRITICAL_ISSUES" ]; then
+            echo ""
+            echo "❌ CRITICAL ISSUES: ${CRITICAL_ISSUES%,}"
+            exit 1
+          else
+            echo ""
+            echo "✅ No critical issues found!"
+          fi
+
+  fix-all-issues:
+    runs-on: ubuntu-latest
+    needs: diagnose-why-not-publishing
+    if: github.event.inputs.action == 'fix' || failure()
+    steps:
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli@latest
+
+      - name: Auto-Fix Issues
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          cd backend
+          railway variables set ENABLE_AUTO_GENERATION="true"
+          railway variables set GENERATION_INTERVAL_HOURS="1"
+          railway variables set REQUIRE_MANUAL_APPROVAL="false"
+          echo "✅ Fixed automation settings"
+
+  manual-trigger-video:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action == 'manual-trigger'
+    steps:
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli@latest
+
+      - name: Trigger Manual Video
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: |
+          cd backend
+          DOMAIN=$(railway domain 2>/dev/null || echo "")
+          if [ -n "$DOMAIN" ]; then
+            curl -X POST "https://$DOMAIN/api/v1/scheduler/trigger"
+            echo "✅ Manual trigger sent"
+          fi
