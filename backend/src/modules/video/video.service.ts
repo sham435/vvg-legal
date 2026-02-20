@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { AiService } from "../ai/ai.service";
 import { EngagementPredictor } from "../../ai/intelligence/engagement-predictor";
+import { FreeVideoService } from "./free-video.service";
 import axios from "axios";
 import * as fs from "fs";
 import * as path from "path";
@@ -26,6 +27,7 @@ export class VideoService {
   constructor(
     private readonly config: ConfigService,
     private readonly aiService: AiService,
+    private readonly freeVideoService: FreeVideoService,
     private readonly engagementPredictor?: EngagementPredictor,
   ) {
     this.videoDbPath = path.join(
@@ -250,6 +252,11 @@ export class VideoService {
             break;
           case "ltx-video":
             result = await this.generateWithLTX(finalPrompt, duration);
+            break;
+          case "free-slideshow":
+          case "pollinations":
+          case "article":
+            result = await this.freeVideoService.generateVideoFree(finalPrompt, finalPrompt, "Video");
             break;
           default:
             this.logger.warn(`Unknown engine: ${engine}`);

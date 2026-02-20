@@ -16,6 +16,10 @@ on:
           - fix
           - restart
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   health-check:
     runs-on: ubuntu-latest
@@ -191,6 +195,9 @@ jobs:
     needs: health-check
     if: always()
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Install Railway CLI
         run: npm install -g @railway/cli@latest
 
