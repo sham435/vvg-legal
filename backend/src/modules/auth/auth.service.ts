@@ -68,7 +68,7 @@ export class AuthService {
       throw new Error("User already exists");
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password, 12); // Increased from 10 for better security
 
     const user = await this.prisma.user.create({
       data: {

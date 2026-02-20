@@ -7,11 +7,23 @@ import { VyroModule } from "../vyro/vyro.module";
 import { VideoModule } from "../video/video.module";
 import { MusicModule } from "../music/music.module";
 import { PublishModule } from "../publish/publish.module";
+import { AiModule } from "../ai/ai.module";
+import { SystemModule } from "../system/system.module";
+import { PipelineCoordinatorService } from "./pipeline-coordinator.service";
 
 @Module({
-  imports: [NewsModule, ScriptModule, VyroModule, VideoModule, MusicModule, PublishModule],
+  imports: [
+    NewsModule,
+    ScriptModule,
+    VyroModule,
+    VideoModule,
+    MusicModule,
+    PublishModule,
+    AiModule,
+    SystemModule,
+  ],
   controllers: [PipelineController],
-  providers: [PipelineService],
-  exports: [PipelineService],
+  providers: [PipelineService, PipelineCoordinatorService],
+  exports: [PipelineService, PipelineCoordinatorService],
 })
 export class PipelineModule {}

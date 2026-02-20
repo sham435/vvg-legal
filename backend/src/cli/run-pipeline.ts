@@ -60,7 +60,7 @@ async function bootstrap() {
           );
           logger.log("Published to YouTube");
         } else {
-             logger.warn("Skipping YouTube upload: No local video path available");
+          logger.warn("Skipping YouTube upload: No local video path available");
         }
       } catch (e) {
         logger.error("Failed to publish to YouTube", e.message);

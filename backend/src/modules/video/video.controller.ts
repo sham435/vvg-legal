@@ -1,10 +1,30 @@
-import { Controller, Post, Get, Body } from "@nestjs/common";
-import { ApiTags, ApiOperation } from "@nestjs/swagger";
+import { Controller, Post, Get, Body, Query } from "@nestjs/common";
+import { ApiTags, ApiOperation, ApiProperty } from "@nestjs/swagger";
 import { VideoService } from "./video.service";
 
 class GenerateVideoDto {
+  @ApiProperty({ description: "Video generation prompt" })
   prompt: string;
+
+  @ApiProperty({
+    description: "Video duration in seconds",
+    required: false,
+    default: 5,
+  })
   duration?: number;
+
+  @ApiProperty({
+    description: "Topic for pre-generation scoring (optional)",
+    required: false,
+  })
+  topic?: string;
+
+  @ApiProperty({
+    description: "Skip pre-generation scoring",
+    required: false,
+    default: false,
+  })
+  skipScoring?: boolean;
 }
 
 @ApiTags("Video")
@@ -19,11 +39,17 @@ export class VideoController {
   }
 
   @Post("generate")
-  @ApiOperation({ summary: "Generate single video from prompt" })
+  @ApiOperation({
+    summary: "Generate single video from prompt",
+    description:
+      "Generates a video with optional pre-generation scoring to filter low-potential content",
+  })
   async generateVideo(@Body() dto: GenerateVideoDto) {
     const result = await this.videoService.generateVideo(
       dto.prompt,
       dto.duration || 5,
+      dto.topic,
+      dto.skipScoring || false,
     );
     return {
       success: true,

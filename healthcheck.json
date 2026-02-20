@@ -1,0 +1,17 @@
+{
+  "healthchecks": [
+    {
+      "name": "API Health",
+      "path": "/api/health",
+      "interval": 30,
+      "timeout": 5,
+      "threshold": 2
+    },
+    {
+      "name": "Video Generation",
+      "path": "/api/video/status",
+      "interval": 60,
+      "timeout": 10
+    }
+  ]
+}

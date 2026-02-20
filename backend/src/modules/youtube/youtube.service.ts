@@ -22,12 +22,20 @@ export class YoutubeService {
     const redirectUri = this.config.get<string>("YOUTUBE_REDIRECT_URI");
     const refreshToken = this.config.get<string>("YOUTUBE_REFRESH_TOKEN");
 
-    this.logger.log(`Initializing YouTube API with Client ID: ${clientId ? 'Configured' : 'MISSING'}`);
-    this.logger.log(`YouTube Client Secret: ${clientSecret ? 'Configured' : 'MISSING'}`);
-    this.logger.log(`YouTube Refresh Token: ${refreshToken ? 'Configured' : 'MISSING'}`);
+    this.logger.log(
+      `Initializing YouTube API with Client ID: ${clientId ? "Configured" : "MISSING"}`,
+    );
+    this.logger.log(
+      `YouTube Client Secret: ${clientSecret ? "Configured" : "MISSING"}`,
+    );
+    this.logger.log(
+      `YouTube Refresh Token: ${refreshToken ? "Configured" : "MISSING"}`,
+    );
 
     if (!clientId || !clientSecret || !refreshToken) {
-      this.logger.warn("YouTube credentials not fully configured. Video publishing will be disabled.");
+      this.logger.warn(
+        "YouTube credentials not fully configured. Video publishing will be disabled.",
+      );
       return;
     }
 
@@ -52,9 +60,16 @@ export class YoutubeService {
   /**
    * Check if the YouTube API is successfully connected and authorized.
    */
-  async checkConnection(): Promise<{ success: boolean; channelTitle?: string; error?: string }> {
+  async checkConnection(): Promise<{
+    success: boolean;
+    channelTitle?: string;
+    error?: string;
+  }> {
     if (!this.youtube) {
-      return { success: false, error: "YouTube API not initialized (missing credentials)" };
+      return {
+        success: false,
+        error: "YouTube API not initialized (missing credentials)",
+      };
     }
 
     try {
@@ -92,14 +107,17 @@ export class YoutubeService {
 
     try {
       // Fallback to a very simple title to debug API rejection
-      const safeTitle = "Viral Video Update - " + new Date().toISOString().split('T')[0];
-      this.logger.log(`Uploading video to YouTube: ${safeTitle} (original: ${title.length} chars)`);
+      const safeTitle =
+        "Viral Video Update - " + new Date().toISOString().split("T")[0];
+      this.logger.log(
+        `Uploading video to YouTube: ${safeTitle} (original: ${title.length} chars)`,
+      );
 
       const requestBody = {
         snippet: {
           title: title.substring(0, 100),
           description: (description || "").substring(0, 5000),
-          tags: (tags || []).slice(0, 50).map(t => t.substring(0, 500)),
+          tags: (tags || []).slice(0, 50).map((t) => t.substring(0, 500)),
           categoryId: "22", // People & Blogs
           defaultLanguage: "en",
           defaultAudioLanguage: "en",

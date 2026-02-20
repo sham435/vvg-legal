@@ -54,6 +54,9 @@ export const apiService = {
   // Videos
   getVideos: () => api.get('/video'),
   
+  generateVideo: (prompt: string, duration: number = 5) => 
+    api.post('/video/generate', { prompt, duration }),
+  
   publishVideo: (videoId: string, platforms: string[]) =>
     api.post('/upload', { videoId, platforms }),
 

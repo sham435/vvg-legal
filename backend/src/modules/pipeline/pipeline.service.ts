@@ -49,7 +49,8 @@ export class PipelineService {
     }
 
     // Step 2: generate script
-    const script = await this.scriptService.generateCinematicScriptFromArticle(article);
+    const script =
+      await this.scriptService.generateCinematicScriptFromArticle(article);
     this.logger.log(`Generated cinematic script: ${script.title}`);
 
     // Step 3: generate image (using the article title as prompt)
@@ -77,45 +78,57 @@ export class PipelineService {
       const videoResult = await this.videoService.generateFromScript(script);
       videoUrl = videoResult?.videoUrl;
       localPath = videoResult?.localPath;
-      
+
       if (localPath) {
-          this.logger.log(`Video available at: ${localPath}`);
-          
-          // Step 5: Add background music
-          try {
-             this.logger.log("Searching for background music...");
-             const musicSearch = await this.musicService.search("cinematic news background " + article.title.substring(0,20));
-             if (musicSearch && musicSearch.results && musicSearch.results.length > 0) {
-                 const track = musicSearch.results[0];
-                 this.logger.log(`Downloading music: ${track.title} (${track.url})`);
-                 
-                 const audioPath = await this.downloadFile(track.url, `audio_${Date.now()}.mp3`);
-                 this.logger.log(`Audio downloaded to: ${audioPath}`);
-                 
-                 const mergedPath = await this.videoService.mergeAudio(localPath, audioPath);
-                 localPath = mergedPath;
-                 this.logger.log(`Final video with audio: ${localPath}`);
-             } else {
-                 this.logger.warn("No music found for video");
-             }
-          } catch(musicError) {
-             this.logger.error("Failed to add background music", musicError);
-             // Proceed with silent video
+        this.logger.log(`Video available at: ${localPath}`);
+
+        // Step 5: Add background music
+        try {
+          this.logger.log("Searching for background music...");
+          const musicSearch = await this.musicService.search(
+            "cinematic news background " + article.title.substring(0, 20),
+          );
+          if (
+            musicSearch &&
+            musicSearch.results &&
+            musicSearch.results.length > 0
+          ) {
+            const track = musicSearch.results[0];
+            this.logger.log(`Downloading music: ${track.title} (${track.url})`);
+
+            const audioPath = await this.downloadFile(
+              track.url,
+              `audio_${Date.now()}.mp3`,
+            );
+            this.logger.log(`Audio downloaded to: ${audioPath}`);
+
+            const mergedPath = await this.videoService.mergeAudio(
+              localPath,
+              audioPath,
+            );
+            localPath = mergedPath;
+            this.logger.log(`Final video with audio: ${localPath}`);
+          } else {
+            this.logger.warn("No music found for video");
           }
+        } catch (musicError) {
+          this.logger.error("Failed to add background music", musicError);
+          // Proceed with silent video
+        }
       }
     } catch (error) {
       this.logger.error(
         "❌ Video generation stage failed. Falling back to Article mode.",
         error.message || error,
       );
-      // Fallback: Proceed without videoUrl/localPath. 
+      // Fallback: Proceed without videoUrl/localPath.
       // The code below line 115 will handle this by returning the Article result.
     }
 
     // Step 5: Return result (Video or Article)
-  if (videoUrl || localPath) {
+    if (videoUrl || localPath) {
       this.logger.log(`Generated video URL: ${videoUrl}`);
-      
+
       const result: PipelineResult = {
         type: "video",
         url: videoUrl,
@@ -126,19 +139,23 @@ export class PipelineService {
 
       // Step 6: Auto-publish if localPath exists
       if (localPath) {
-          this.logger.log(`🚀 Attempting auto-publish to YouTube: ${result.title}`);
-          try {
-              await this.publishService.uploadToYouTube(
-                  localPath,
-                  result.title,
-                  result.description
-              );
-              this.logger.log("✅ Auto-published successfully");
-          } catch (pubError) {
-              this.logger.error(`❌ Auto-publishing failed: ${pubError.message}`);
-          }
+        this.logger.log(
+          `🚀 Attempting auto-publish to YouTube: ${result.title}`,
+        );
+        try {
+          await this.publishService.uploadToYouTube(
+            localPath,
+            result.title,
+            result.description,
+          );
+          this.logger.log("✅ Auto-published successfully");
+        } catch (pubError) {
+          this.logger.error(`❌ Auto-publishing failed: ${pubError.message}`);
+        }
       } else {
-          this.logger.warn("⚠️ Skipping YouTube upload: Video URL exists but local file path is missing (Download failed?)");
+        this.logger.warn(
+          "⚠️ Skipping YouTube upload: Video URL exists but local file path is missing (Download failed?)",
+        );
       }
 
       return result;

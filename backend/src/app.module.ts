@@ -1,9 +1,12 @@
-import { Module } from "@nestjs/common";
+import { Module, Logger } from "@nestjs/common";
 import { ServeStaticModule } from "@nestjs/serve-static";
 import { join } from "path";
 import { ConfigModule } from "@nestjs/config";
 import { ScheduleModule } from "@nestjs/schedule";
 import { BullModule } from "@nestjs/bullmq";
+import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
+import { APP_GUARD } from "@nestjs/core";
+import { validateEnv, checkRequiredSecrets } from "./config/env.validation";
 import { PrismaModule } from "./common/prisma/prisma.module";
 import { TrendsModule } from "./modules/trends/trends.module";
 import { AiModule } from "./modules/ai/ai.module";
@@ -27,18 +30,44 @@ import { VyroModule } from "./modules/vyro/vyro.module";
 import { SystemModule } from "./modules/system/system.module";
 import { AppController } from "./app.controller";
 import { MarketingModule } from "./modules/marketing/marketing.module";
+import { OrchestratorModule } from "./ai/orchestrator/orchestrator.module";
+import { GeneticModule } from "./ai/genetic/genetic.module";
 
 @Module({
   controllers: [AppController],
   imports: [
-    // Configuration
+    // Configuration with validation
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ".env",
+      validate: validateEnv,
+      validationSchema: {},
+      validationOptions: {
+        allowUnknown: true,
+        abortEarly: false,
+      },
+    }),
+
+    // Rate Limiting - Protect against DDoS and brute force
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          ttl: 60000, // 1 minute
+          limit: 10,  // 10 requests per minute per IP
+        },
+        {
+          ttl: 3600000, // 1 hour
+          limit: 100,   // 100 requests per hour per IP
+        },
+      ],
     }),
 
     // Scheduling
     ScheduleModule.forRoot(),
+
+    // Orchestration
+    OrchestratorModule,
+    GeneticModule,
 
     // BullMQ for queue processing
     BullModule.forRootAsync({
@@ -107,6 +136,13 @@ import { MarketingModule } from "./modules/marketing/marketing.module";
     PublishModule,
     SystemModule,
     MarketingModule,
+  ],
+  providers: [
+    // Global rate limiting guard
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}

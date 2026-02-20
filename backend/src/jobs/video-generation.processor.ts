@@ -32,7 +32,10 @@ export class VideoGenerationProcessor extends WorkerHost {
       job.updateProgress(10);
       this.logger.log("Generating script...");
 
-      const script = await this.aiService.generateCinematicScript(topic, description);
+      const script = await this.aiService.generateCinematicScript(
+        topic,
+        description,
+      );
 
       // Step 2: Create video record
       job.updateProgress(20);

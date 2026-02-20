@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { AiService } from "../ai/ai.service";
+import { EngagementPredictor } from "../../ai/intelligence/engagement-predictor";
 import axios from "axios";
 import * as fs from "fs";
 import * as path from "path";
@@ -24,13 +25,14 @@ export class VideoService {
 
   constructor(
     private readonly config: ConfigService,
-    private readonly aiService: AiService
+    private readonly aiService: AiService,
+    private readonly engagementPredictor?: EngagementPredictor,
   ) {
     this.videoDbPath = path.join(
       process.cwd(),
       "uploads",
       "videos",
-      "metadata.json"
+      "metadata.json",
     );
     this.ensureUploadDir();
   }
@@ -59,28 +61,51 @@ export class VideoService {
   }
 
   /**
+   * Save video metadata to JSON store
+   */
+  private saveVideoMetadata(metadata: any) {
+    try {
+      const videos = fs.existsSync(this.videoDbPath)
+        ? JSON.parse(fs.readFileSync(this.videoDbPath, "utf8"))
+        : [];
+
+      videos.unshift(metadata); // Add new video to top
+
+      // Limit history to last 100 videos
+      if (videos.length > 100) videos.length = 100;
+
+      fs.writeFileSync(this.videoDbPath, JSON.stringify(videos, null, 2));
+      this.logger.log(`Saved video metadata to ${this.videoDbPath}`);
+    } catch (err) {
+      this.logger.error("Failed to save video metadata", err);
+    }
+  }
+
+  /**
    * Health check for video engines (circuit breaker)
    */
   async checkEngineHealth(engine: string): Promise<boolean> {
-    // Circuit breaker health check
+    const endpointKey = `${engine.toUpperCase()}_HEALTH_ENDPOINT`;
+    const endpoint = this.config.get<string>(endpointKey);
 
-
-    if (this.engineHealth.has(engine) && !this.engineHealth.get(engine)) {
-      return false;
-    }
+    this.logger.debug(
+      `Checking health for ${engine} using ${endpointKey}: ${endpoint}`,
+    );
 
     try {
-      const endpoint = this.config.get<string>(
-        `${engine.toUpperCase()}_HEALTH_ENDPOINT`
-      );
-      if (!endpoint) return true; // Assume healthy if no endpoint configured
+      if (!endpoint) {
+        this.logger.debug(`No health endpoint for ${engine}, assuming healthy`);
+        return true;
+      }
 
       const response = await axios.get(endpoint, { timeout: 3000 });
       const isHealthy = response.status === 200;
       this.engineHealth.set(engine, isHealthy);
       return isHealthy;
     } catch (err) {
-      this.logger.warn(`Health check failed for ${engine}: ${err.message}`);
+      this.logger.warn(
+        `Health check failed for ${engine} (${endpoint}): ${err.message}`,
+      );
       this.engineHealth.set(engine, false);
       return false;
     }
@@ -88,15 +113,95 @@ export class VideoService {
 
   /**
    * Main entry point for video generation with fallback logic.
+   *
+   * @param prompt Video generation prompt
+   * @param duration Video duration in seconds
+   * @param topic Optional topic for pre-generation scoring (extracted from prompt if not provided)
+   * @param skipScoring Optional flag to bypass pre-generation scoring
    */
   public async generateVideo(
     prompt: string,
-    duration: number = 5
+    duration: number = 5,
+    topic?: string,
+    skipScoring: boolean = false,
   ): Promise<VideoGenerationResult> {
+    const startTime = Date.now();
+    this.logger.log(
+      `Starting video generation for prompt: ${prompt.substring(0, 50)}...`,
+    );
+
+    // Pre-generation scoring (optional, configurable)
+    const enablePreScoring = this.config.get<boolean>(
+      "ENABLE_PRE_GENERATION_SCORING",
+      true,
+    );
+    const scoringThreshold = this.config.get<number>(
+      "PRE_GENERATION_SCORING_THRESHOLD",
+      60,
+    );
+
+    if (enablePreScoring && !skipScoring && this.engagementPredictor) {
+      try {
+        const extractedTopic = topic || prompt.substring(0, 100); // Use first 100 chars as topic if not provided
+        this.logger.log(
+          `🔍 Pre-generation scoring enabled. Evaluating prompt potential...`,
+        );
+
+        const score = await this.engagementPredictor.predictViralScore(
+          prompt,
+          extractedTopic,
+        );
+
+        this.logger.log(
+          `📊 Viral Score: ${score.totalScore}/100 ` +
+            `(Hook: ${score.metrics.hookStrength}, Pacing: ${score.metrics.pacingScore}, ` +
+            `Emotion: ${score.metrics.emotionalImpact}, Trend: ${score.metrics.trendAlignment})`,
+        );
+
+        if (score.totalScore < scoringThreshold) {
+          const errorMessage = `Pre-generation scoring failed: Score ${score.totalScore} below threshold ${scoringThreshold}. Suggestions: ${score.suggestions.join(", ")}`;
+          this.logger.warn(`⛔ ${errorMessage}`);
+          throw new Error(errorMessage);
+        }
+
+        this.logger.log(
+          `✅ Pre-generation scoring passed (${score.totalScore} >= ${scoringThreshold}). Proceeding with generation.`,
+        );
+
+        // Log suggestions for improvement (even if passed)
+        if (score.suggestions.length > 0) {
+          this.logger.debug(`💡 Suggestions: ${score.suggestions.join("; ")}`);
+        }
+      } catch (err) {
+        // If scoring fails, check if we should proceed or abort
+        const abortOnScoringFailure = this.config.get<boolean>(
+          "ABORT_ON_SCORING_FAILURE",
+          false,
+        );
+
+        if (abortOnScoringFailure) {
+          this.logger.error(
+            "Pre-generation scoring failed and ABORT_ON_SCORING_FAILURE is enabled",
+            err,
+          );
+          throw err;
+        } else {
+          this.logger.warn(
+            "Pre-generation scoring failed but continuing (ABORT_ON_SCORING_FAILURE=false)",
+            err,
+          );
+        }
+      }
+    } else if (enablePreScoring && !this.engagementPredictor) {
+      this.logger.warn(
+        "Pre-generation scoring enabled but EngagementPredictor not available. Proceeding without scoring.",
+      );
+    }
+
     const priority = this.config
       .get<string>(
         "VIDEO_ENGINE_PRIORITY",
-        "nemotron-nano,cosmos,veo,cogvideox,svd"
+        "wan-1.3b,ltx-video,hunyuan-video,wan-2.1,silicon-flow",
       )
       .split(",")
       .map((e) => e.trim());
@@ -113,6 +218,8 @@ export class VideoService {
 
     const errors: string[] = [];
     for (const engine of priority) {
+      if (engine === "nemotron-nano") continue; // Keep as safety guard
+
       const isHealthy = await this.checkEngineHealth(engine);
       if (!isHealthy) {
         this.logger.warn(`Engine ${engine} is unhealthy, skipping`);
@@ -125,11 +232,6 @@ export class VideoService {
         this.logger.log(`Attempting video generation with engine: ${engine}`);
 
         switch (engine) {
-          case "nemotron-nano":
-            this.logger.log("Nemotron-Nano: Prompt refined and validated. Handing off to next video engine.");
-            // This is a virtual engine for refinement/validation. 
-            // Since it's not a video generator, we let it flow to the next engine in priority.
-            break;
           case "cosmos":
             result = await this.generateWithNvidiaCosmos(finalPrompt, duration);
             break;
@@ -142,42 +244,36 @@ export class VideoService {
           case "svd":
             result = await this.generateWithSVD(finalPrompt, duration);
             break;
+          case "wan-1.3b":
+          case "wan-2.1":
+            result = await this.generateWithWan(finalPrompt, duration);
+            break;
+          case "ltx-video":
+            result = await this.generateWithLTX(finalPrompt, duration);
+            break;
           default:
             this.logger.warn(`Unknown engine: ${engine}`);
+            continue;
         }
 
-        if (result) {
-          // Ensure we have a local path for uploading if one wasn't provided by the engine
-          if (result.videoUrl && !result.localPath) {
-            try {
-              const safeTitle = prompt
-                .replace(/[^a-z0-9]/gi, "_")
-                .substring(0, 30);
-              const filename = `video_${safeTitle}_${Date.now()}.mp4`;
-              this.logger.log(
-                `Downloading video from ${engine} for upload: ${filename}`
-              );
-              result.localPath = await this.downloadVideo(
-                result.videoUrl,
-                filename
-              );
-            } catch (downloadError) {
-              this.logger.warn(
-                `Failed to download video from ${engine}: ${downloadError.message}`
-              );
-              // We continue even if download fails, but localPath will be missing
-            }
-          }
+        if (result && (result.videoUrl || result.localPath)) {
+          const timeTaken = Date.now() - startTime;
+          this.logger.log(
+            `Generation successful with ${engine} in ${timeTaken}ms`,
+          );
 
-          // Attach the refined prompt to the result if it was changed
-          if (finalPrompt !== prompt) {
-            (result as any).refinedPrompt = finalPrompt;
-          }
+          // Persist metadata for Dashboard
+          this.saveVideoMetadata({
+            ...result,
+            prompt: finalPrompt,
+            createdAt: new Date(),
+            engine,
+          });
 
-          return result;
+          return { ...result, engine };
         }
       } catch (err) {
-        this.logger.warn(`${engine} failed: ${err.message}`);
+        this.logger.error(`Engine ${engine} failed: ${err.message}`);
         errors.push(`${engine}: ${err.message}`);
         this.engineHealth.set(engine, false);
         // Optional: auto-reset circuit after 10 mins
@@ -216,19 +312,23 @@ export class VideoService {
    */
   async generateWithCogVideoX(
     prompt: string,
-    duration: number = 5
+    duration: number = 5,
   ): Promise<VideoGenerationResult> {
-    const endpoint = this.config.get<string>("COGVIDEOT_ENDPOINT");
+    const endpoint = this.config.get<string>("COGVIDEOX_ENDPOINT");
     if (!endpoint) {
       throw new Error("CogVideoX endpoint not configured");
     }
 
     try {
       this.logger.log("Generating video with CogVideoX...");
-      const response = await axios.post(`${endpoint}/generate`, {
-        prompt,
-        num_frames: Math.floor(duration * 8), // Assuming 8 FPS
-      });
+      const response = await axios.post(
+        `${endpoint}/generate`,
+        {
+          prompt,
+          num_frames: Math.min(Math.floor(duration * 8), 16), // Cap at 16 frames for local stability
+        },
+        { timeout: 180000 },
+      ); // 180s timeout
 
       const { video_url, local_path } = response.data;
       return {
@@ -248,7 +348,7 @@ export class VideoService {
    */
   async generateWithSVD(
     prompt: string,
-    duration: number = 5
+    duration: number = 5,
   ): Promise<VideoGenerationResult> {
     const endpoint = this.config.get<string>("SVD_ENDPOINT");
     if (!endpoint) {
@@ -257,9 +357,15 @@ export class VideoService {
 
     try {
       this.logger.log("Generating video with SVD...");
-      const response = await axios.post(`${endpoint}/generate`, {
-        prompt,
-      });
+      // NO PLACEHOLDER: removed generateWithPlaceholder() logic.
+      // Explicit error is thrown if this fails.
+      const response = await axios.post(
+        `${endpoint}/generate`,
+        {
+          prompt, // SVD prompt or initial image logic
+        },
+        { timeout: 300000 },
+      ); // 300s timeout
 
       const { video_url, local_path } = response.data;
       return {
@@ -275,11 +381,145 @@ export class VideoService {
   }
 
   /**
+   * Generate video using Wan 2.1 (T2V-1.3B) local server
+   * Optimized for Consumer GPUs (8GB VRAM) -> 480p default
+   */
+  async generateWithWan(
+    prompt: string,
+    duration: number = 5,
+  ): Promise<VideoGenerationResult> {
+    const endpoint = this.config.get<string>("WAN_ENDPOINT"); // e.g. http://wan-service:8000
+    if (!endpoint) {
+      throw new Error("Wan 2.1 endpoint not configured");
+    }
+
+    try {
+      this.logger.log("Generating video with Wan 2.1 (T2V-1.3B)...");
+
+      // Official Parameters for 1.3B Model (Consumer GPU Optimized)
+      // Size: 832*480 (480p)
+      // Guide Scale: 6 (Recommended for stability)
+      // Sample Shift: 8 (Recommended range 8-12)
+      const response = await axios.post(
+        `${endpoint}/generate`,
+        {
+          prompt,
+          task: "t2v-1.3b",
+          size: "832*480", // Explicit resolution as per docs
+          sample_guide_scale: 6,
+          sample_shift: 8,
+          offload_model: true, // Auto-offload for 8GB VRAM support
+          t5_cpu: true, // Offload text encoder to CPU to save VRAM
+          duration: duration,
+        },
+        { timeout: 600000 }, // 10 min timeout
+      );
+
+      const { video_url, local_path } = response.data;
+      return {
+        videoUrl: video_url,
+        localPath: local_path,
+        duration,
+        engine: "wan-1.3b",
+      };
+    } catch (error) {
+      this.logger.error("Wan 2.1 generation failed", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate video using LTX-Video (Lightricks DiT-based model)
+   * Real-time capable, 30 FPS at 1216×704 resolution
+   *
+   * Model constraints:
+   * - Resolution must be divisible by 32
+   * - Number of frames must be divisible by 8 + 1 (e.g., 257)
+   * - Best on resolutions under 720 x 1280
+   * - Frames below 257 recommended
+   *
+   * Supports multiple variants:
+   * - ltxv-13b-0.9.8-dev (highest quality)
+   * - ltxv-13b-0.9.8-distilled (faster, less VRAM)
+   * - ltxv-2b-0.9.8-distilled (light VRAM usage)
+   * - fp8 quantized versions available
+   */
+  async generateWithLTX(
+    prompt: string,
+    duration: number = 5,
+    inputImagePath?: string,
+  ): Promise<VideoGenerationResult> {
+    const endpoint = this.config.get<string>("LTX_ENDPOINT");
+    if (!endpoint) {
+      throw new Error("LTX-Video endpoint not configured");
+    }
+
+    try {
+      this.logger.log("Generating video with LTX-Video...");
+
+      // Calculate optimal resolution and frame count based on constraints
+      // Target: 704x1216 (under 720x1280 limit, divisible by 32)
+      // For faster generation, use smaller: 480x832 (divisible by 32)
+      const targetWidth = 832; // Divisible by 32
+      const targetHeight = 480; // Divisible by 32, under 720 limit
+
+      // Calculate frames: divisible by 8 + 1, below 257
+      // For 5 seconds at 30 FPS = 150 frames
+      // Nearest valid: 153 (152 + 1, where 152 is divisible by 8)
+      // For shorter videos, use: 97 (96 + 1), 65 (64 + 1), 33 (32 + 1), 17 (16 + 1)
+      const fps = 30;
+      const totalFrames = Math.floor(duration * fps);
+      // Round down to nearest (8n + 1) where n is integer
+      const validFrames = Math.max(
+        17,
+        Math.min(257, Math.floor((totalFrames - 1) / 8) * 8 + 1),
+      );
+
+      // Model variant selection (default to distilled for speed)
+      const modelVariant = this.config.get<string>(
+        "LTX_MODEL_VARIANT",
+        "ltxv-13b-0.9.8-distilled",
+      );
+
+      const requestBody: any = {
+        prompt,
+        height: targetHeight,
+        width: targetWidth,
+        num_frames: validFrames,
+        pipeline_config: `configs/${modelVariant}.yaml`,
+        seed: Math.floor(Math.random() * 1000000),
+      };
+
+      // Add input image if provided (for image-to-video)
+      if (inputImagePath) {
+        requestBody.input_image_path = inputImagePath;
+      }
+
+      const response = await axios.post(
+        `${endpoint}/generate`,
+        requestBody,
+        { timeout: 600000 }, // 10 min timeout (LTX can be fast but allow for upscaling)
+      );
+
+      const { video_url, local_path, output_path } = response.data;
+      return {
+        videoUrl: video_url || output_path,
+        localPath: local_path || output_path,
+        duration,
+        engine: "ltx-video",
+      };
+    } catch (error) {
+      this.logger.error("LTX-Video generation failed", error);
+      throw error;
+    }
+  }
+
+  /**
    * Generate video using Luma AI (via API)
    */
   async generateWithLuma(
     prompt: string,
-    duration: number = 5
+    duration: number = 5,
   ): Promise<VideoGenerationResult> {
     const apiKey = this.config.get<string>("LUMA_API_KEY");
     if (!apiKey) {
@@ -300,7 +540,7 @@ export class VideoService {
             Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
           },
-        }
+        },
       );
 
       return {
@@ -319,7 +559,7 @@ export class VideoService {
    */
   async generateWithRunway(
     prompt: string,
-    duration: number = 5
+    duration: number = 5,
   ): Promise<VideoGenerationResult> {
     const apiKey = this.config.get<string>("RUNWAY_API_KEY");
     if (!apiKey) {
@@ -339,7 +579,7 @@ export class VideoService {
           headers: {
             Authorization: `Bearer ${apiKey}`,
           },
-        }
+        },
       );
 
       return {
@@ -353,14 +593,13 @@ export class VideoService {
     }
   }
 
-
   /**
    * Generate video using Hugging Face Serverless Inference API (free tier).
    * Expects the model to return a JSON with a `video_url` field.
    */
   async generateWithHF(
     prompt: string,
-    duration: number = 5
+    duration: number = 5,
   ): Promise<VideoGenerationResult> {
     const apiKey = this.config.get<string>("HF_API_TOKEN");
     if (!apiKey) {
@@ -381,7 +620,7 @@ export class VideoService {
             Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
           },
-        }
+        },
       );
 
       // The actual response format depends on the HF model's inference widget output
@@ -392,11 +631,8 @@ export class VideoService {
           engine: "hf",
         };
       } else {
-        this.logger.warn(
-          "HF model did not return video_url"
-        );
+        this.logger.warn("HF model did not return video_url");
         throw new Error("Hugging Face model did not return a video URL");
-
       }
     } catch (error) {
       this.logger.error("HF generation failed", error);
@@ -409,7 +645,7 @@ export class VideoService {
    */
   async generateWithHFVideo(
     prompt: string,
-    duration: number = 5
+    duration: number = 5,
   ): Promise<VideoGenerationResult> {
     const endpoint = this.config.get<string>("HF_VIDEO_ENDPOINT");
     if (!endpoint) {
@@ -439,7 +675,7 @@ export class VideoService {
    */
   async generateWithHunyuan(
     prompt: string,
-    duration: number = 5
+    duration: number = 5,
   ): Promise<VideoGenerationResult> {
     const endpoint = this.config.get<string>("HUNYUAN_ENDPOINT");
     if (!endpoint) {
@@ -454,7 +690,7 @@ export class VideoService {
    */
   async generateWithVeo(
     prompt: string,
-    duration: number = 5
+    duration: number = 5,
   ): Promise<VideoGenerationResult> {
     const apiKey = this.config.get<string>("VEO_API_KEY");
     if (!apiKey) {
@@ -486,7 +722,7 @@ export class VideoService {
           headers: {
             "Content-Type": "application/json",
           },
-        }
+        },
       );
 
       // Veo returns a long‑running operation
@@ -497,7 +733,7 @@ export class VideoService {
       let videoUrl: string | undefined;
       for (let i = 0; i < 30; i++) {
         const statusResponse = await axios.get(
-          `https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${apiKey}`
+          `https://generativelanguage.googleapis.com/v1beta/${operationName}?key=${apiKey}`,
         );
         if (statusResponse.data.done) {
           videoUrl = statusResponse.data.response.outputs[0].uri;
@@ -524,7 +760,7 @@ export class VideoService {
    */
   async generateWithNvidiaCosmos(
     prompt: string,
-    duration: number = 5
+    duration: number = 5,
   ): Promise<VideoGenerationResult> {
     const apiKey =
       this.config.get<string>("NVIDIA_API_KEY") ||
@@ -558,7 +794,7 @@ export class VideoService {
             Authorization: `Bearer ${apiKey}`,
             Accept: "application/json",
           },
-        }
+        },
       );
 
       // NVIDIA Cosmos often returns a base64 string or a preview URL depending on the specific NIM setup.
@@ -571,7 +807,7 @@ export class VideoService {
         for (let i = 0; i < 60; i++) {
           const statusResponse = await axios.get(
             `https://ai.api.nvidia.com/v1/genai/status/${operationId}`,
-            { headers: { Authorization: `Bearer ${apiKey}` } }
+            { headers: { Authorization: `Bearer ${apiKey}` } },
           );
 
           if (statusResponse.data.status === "succeeded") {
@@ -583,7 +819,7 @@ export class VideoService {
           }
           if (statusResponse.data.status === "failed") {
             throw new Error(
-              `Cosmos generation failed: ${statusResponse.data.error}`
+              `Cosmos generation failed: ${statusResponse.data.error}`,
             );
           }
           await new Promise((r) => setTimeout(r, 5000));
@@ -606,7 +842,7 @@ export class VideoService {
     } catch (error) {
       this.logger.error(
         "NVIDIA Cosmos generation failed",
-        error.response?.data || error.message
+        error.response?.data || error.message,
       );
       throw error;
     }
@@ -618,7 +854,7 @@ export class VideoService {
   public async generateFromScript(script: any): Promise<VideoGenerationResult> {
     if (script && script.scenes) {
       const prompts = script.scenes.map(
-        (s: any) => s.visualPrompt || s.description
+        (s: any) => s.visualPrompt || s.description,
       );
       return this.generateAndMergeScenes(prompts);
     }
@@ -630,11 +866,11 @@ export class VideoService {
    */
   public async mergeAudio(
     videoPath: string,
-    audioPath: string
+    audioPath: string,
   ): Promise<string> {
     const outputPath = videoPath.replace(".mp4", "_with_audio.mp4");
     this.logger.log(
-      `Merging audio: ${videoPath} + ${audioPath} -> ${outputPath}`
+      `Merging audio: ${videoPath} + ${audioPath} -> ${outputPath}`,
     );
 
     return new Promise((resolve, reject) => {
@@ -664,7 +900,7 @@ export class VideoService {
    */
   async generateAndMergeScenes(
     prompts: string[],
-    durationPerScene: number = 5
+    durationPerScene: number = 5,
   ): Promise<VideoGenerationResult> {
     const results: string[] = [];
     const failedScenes: number[] = [];
@@ -673,8 +909,16 @@ export class VideoService {
 
     for (let i = 0; i < prompts.length; i++) {
       try {
-        this.logger.log(`Scene ${i + 1}/${prompts.length}: ${prompts[i].substring(0, 50)}...`);
-        const result = await this.generateVideo(prompts[i], durationPerScene);
+        this.logger.log(
+          `Scene ${i + 1}/${prompts.length}: ${prompts[i].substring(0, 50)}...`,
+        );
+        // Skip pre-generation scoring for script scenes (already evolved and scored)
+        const result = await this.generateVideo(
+          prompts[i],
+          durationPerScene,
+          undefined,
+          true,
+        );
         if (result.localPath) {
           results.push(result.localPath);
         } else if (result.videoUrl) {
@@ -708,7 +952,7 @@ export class VideoService {
       process.cwd(),
       "uploads",
       "videos",
-      `merged_${Date.now()}.mp4`
+      `merged_${Date.now()}.mp4`,
     );
 
     this.logger.log(`Merging ${results.length} scenes into final video...`);
@@ -730,7 +974,10 @@ export class VideoService {
             engine: "ffmpeg_merged",
           });
         })
-        .mergeToFile(finalOutputPath, path.join(process.cwd(), "uploads", "videos", "temp"));
+        .mergeToFile(
+          finalOutputPath,
+          path.join(process.cwd(), "uploads", "videos", "temp"),
+        );
     });
   }
 }

@@ -178,7 +178,10 @@ export class TiktokService {
 
       return response.data;
     } catch (error) {
-      this.logger.error("Failed to get TikTok access token", error.response?.data || error.message);
+      this.logger.error(
+        "Failed to get TikTok access token",
+        error.response?.data || error.message,
+      );
       throw error;
     }
   }
@@ -217,7 +220,10 @@ export class TiktokService {
 
       return response.data;
     } catch (error) {
-      this.logger.error("Failed to refresh TikTok access token", error.response?.data || error.message);
+      this.logger.error(
+        "Failed to refresh TikTok access token",
+        error.response?.data || error.message,
+      );
       throw error;
     }
   }
@@ -246,7 +252,10 @@ export class TiktokService {
         },
       );
     } catch (error) {
-      this.logger.error("Failed to revoke TikTok access", error.response?.data || error.message);
+      this.logger.error(
+        "Failed to revoke TikTok access",
+        error.response?.data || error.message,
+      );
       throw error;
     }
   }

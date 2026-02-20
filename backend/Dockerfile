@@ -1,35 +1,41 @@
 # Build stage
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Install ALL dependencies (including devDependencies for build)
+# Install build dependencies for native modules
+RUN apk add --no-cache python3 make g++
+
+# Copy package files
 COPY package*.json ./
+COPY prisma ./prisma/
+
+# Install ALL dependencies
 RUN npm ci
 
-# Copy source
-COPY . .
+# Generate Prisma Client (needs empty schema for build, actual migrations run at runtime)
+RUN npx prisma generate || echo "Prisma generate skipped - will run at startup"
 
-# Generate Prisma Client
-RUN npx prisma generate
+# Copy source code
+COPY . .
 
 # Build application
 RUN npm run build
 
-# Verify build output exists
-RUN ls -la dist/src/main.js || (echo "Build failed - dist/src/main.js not found" && exit 1)
+# Verify build output
+RUN ls -la dist/src/main.js || (echo "❌ Build failed - dist/src/main.js not found" && exit 1)
 
 # Production stage
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
 # Install runtime dependencies
 RUN apk add --no-cache \
     python3 \
-    py3-pip \
     ffmpeg \
-    bash
+    bash \
+    curl
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
@@ -41,25 +47,18 @@ COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nestjs:nodejs /app/package*.json ./
 COPY --from=builder --chown=nestjs:nodejs /app/prisma ./prisma
 
-# Copy wait-for-it script for Redis/Postgres (assuming scripts folder is in root context, but here we are in backend context usually relative to docker-compose context)
-# Adjusting to assume build context is backend root or repo root.
-# Based on plan, this Dockerfile is in backend/Dockerfile.
-# If build context is repo root, we copy from scripts.
-# If build context is backend, we might not have access to scripts unless copied or context is higher.
-# The user's blueprint says "COPY scripts/wait-for-it.sh /usr/local/bin/wait-for-it.sh".
-# I will assume the build context will be the repository root or we will ensure scripts are available.
-# However, usually standard is `docker build -f backend/Dockerfile .` from root.
-# Let's assume root context for now as per blueprint patterns.
+# Create uploads directory
+RUN mkdir -p uploads/videos && chown -R nestjs:nodejs uploads
 
 # Switch to non-root user
 USER nestjs
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:${PORT:-3001}/api/health', (r) => { if (r.statusCode === 200) process.exit(0); process.exit(1); }).on('error', () => process.exit(1))"
-
 # Expose port
-EXPOSE 3001
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:3000/health || exit 1
 
 # Start application
 CMD ["npm", "run", "start:prod"]

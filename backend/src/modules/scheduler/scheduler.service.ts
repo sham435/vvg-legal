@@ -22,7 +22,7 @@ export class SchedulerService implements OnModuleInit {
   private readonly videoDbPath = path.join(
     process.cwd(),
     "outputs",
-    "videos.json"
+    "videos.json",
   );
   private lastError: string | null = null;
   private lastRunTime: Date | null = null;
@@ -30,7 +30,7 @@ export class SchedulerService implements OnModuleInit {
   private readonly settingsPath = path.join(
     process.cwd(),
     "outputs",
-    "settings.json"
+    "settings.json",
   );
 
   constructor(
@@ -42,7 +42,7 @@ export class SchedulerService implements OnModuleInit {
     private readonly notificationsService: NotificationsService,
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly pipelineService: PipelineService,
-    private readonly publishService: PublishService
+    private readonly publishService: PublishService,
   ) {
     // Initial load from environment variables
     this.isAutoGenerationEnabled =
@@ -57,7 +57,7 @@ export class SchedulerService implements OnModuleInit {
   private queueJobInFile(
     topic: any,
     customPrompt?: string,
-    fullScript?: string
+    fullScript?: string,
   ) {
     try {
       let videos = [];
@@ -100,7 +100,7 @@ export class SchedulerService implements OnModuleInit {
       videos.push(newJob);
       fs.writeFileSync(this.videoDbPath, JSON.stringify(videos, null, 2));
       this.logger.log(
-        `✅ Job queued: ${newJob.filename} (Prompt: ${finalPrompt.substring(0, 50)}...)`
+        `✅ Job queued: ${newJob.filename} (Prompt: ${finalPrompt.substring(0, 50)}...)`,
       );
     } catch (error) {
       this.logger.error(`Failed to queue job in file: ${error.message}`);
@@ -137,42 +137,57 @@ export class SchedulerService implements OnModuleInit {
   }
 
   async getDiagnostics() {
-      const unusedTopics = await this.trendsService.getAllTopics(5, false);
-      const latestVideos = await this.prisma.video.findMany({ take: 5, orderBy: { createdAt: 'desc' } });
-      const youtubeStatus = await this.publishService.checkYouTubeConnection();
-      const newsStatus = await this.trendsService.testNewsApi();
-      const aiStatus = await this.aiService.checkConnection();
-      const nvidiaConfigured = !!(this.config.get("NVIDIA_API_KEY") || this.config.get("OPENROUTER_API_KEY"));
-      const newsApiConfigured = !!this.config.get("NEWS_API_KEY");
-      
-      const counts = {
-          pendingVideos: await this.prisma.video.count({ where: { status: 'PENDING' } }),
-          publishedVideos: await this.prisma.video.count({ where: { status: 'PUBLISHED' } }),
-          failedVideos: await this.prisma.video.count({ where: { status: 'FAILED' } }),
-          unusedTopics: unusedTopics.length,
-          totalPublishLogs: await this.prisma.publishLog.count(),
-      };
+    const unusedTopics = await this.trendsService.getAllTopics(5, false);
+    const latestVideos = await this.prisma.video.findMany({
+      take: 5,
+      orderBy: { createdAt: "desc" },
+    });
+    const youtubeStatus = await this.publishService.checkYouTubeConnection();
+    const newsStatus = await this.trendsService.testNewsApi();
+    const aiStatus = await this.aiService.checkConnection();
+    const nvidiaConfigured = !!(
+      this.config.get("NVIDIA_API_KEY") || this.config.get("OPENROUTER_API_KEY")
+    );
+    const newsApiConfigured = !!this.config.get("NEWS_API_KEY");
 
-      return {
-          system: {
-              autoGenerationEnabled: this.isAutoGenerationEnabled,
-              youtubeAuthorized: youtubeStatus.success,
-              youtubeChannel: youtubeStatus.channelTitle,
-              youtubeError: youtubeStatus.error,
-              newsApiConnected: newsStatus.success,
-              newsArticleCount: newsStatus.articleCount,
-              newsError: newsStatus.error,
-              aiConnected: aiStatus.success,
-              aiError: aiStatus.error,
-              nvidiaConfigured,
-          },
-          tracking: {
-              lastRunTime: this.lastRunTime,
-              lastError: this.lastError,
-          },
-          counts,
-          latestVideos: latestVideos.map(v => ({ id: v.id, title: v.title, status: v.status })),
-      };
+    const counts = {
+      pendingVideos: await this.prisma.video.count({
+        where: { status: "PENDING" },
+      }),
+      publishedVideos: await this.prisma.video.count({
+        where: { status: "PUBLISHED" },
+      }),
+      failedVideos: await this.prisma.video.count({
+        where: { status: "FAILED" },
+      }),
+      unusedTopics: unusedTopics.length,
+      totalPublishLogs: await this.prisma.publishLog.count(),
+    };
+
+    return {
+      system: {
+        autoGenerationEnabled: this.isAutoGenerationEnabled,
+        youtubeAuthorized: youtubeStatus.success,
+        youtubeChannel: youtubeStatus.channelTitle,
+        youtubeError: youtubeStatus.error,
+        newsApiConnected: newsStatus.success,
+        newsArticleCount: newsStatus.articleCount,
+        newsError: newsStatus.error,
+        aiConnected: aiStatus.success,
+        aiError: aiStatus.error,
+        nvidiaConfigured,
+      },
+      tracking: {
+        lastRunTime: this.lastRunTime,
+        lastError: this.lastError,
+      },
+      counts,
+      latestVideos: latestVideos.map((v) => ({
+        id: v.id,
+        title: v.title,
+        status: v.status,
+      })),
+    };
   }
 
   stopCron() {
@@ -209,14 +224,20 @@ export class SchedulerService implements OnModuleInit {
    */
   @Cron(CronExpression.EVERY_HOUR, { name: "hourly-generation" })
   async handleHourlyVideoGeneration() {
-    this.logger.log("🎬 [Internal Scheduler] Checking if auto-generation is enabled...");
-    
+    this.logger.log(
+      "🎬 [Internal Scheduler] Checking if auto-generation is enabled...",
+    );
+
     if (!this.isAutoGenerationEnabled) {
-      this.logger.log("⏸️ [Internal Scheduler] Auto-generation is currently DISABLED (ENABLE_AUTO_GENERATION=false). Skipping check.");
+      this.logger.log(
+        "⏸️ [Internal Scheduler] Auto-generation is currently DISABLED (ENABLE_AUTO_GENERATION=false). Skipping check.",
+      );
       return;
     }
 
-    this.logger.log("🎬 [Internal Scheduler] Auto-generation is ENABLED. Starting process...");
+    this.logger.log(
+      "🎬 [Internal Scheduler] Auto-generation is ENABLED. Starting process...",
+    );
 
     try {
       // 1. Fetch fresh trending topics
@@ -230,24 +251,32 @@ export class SchedulerService implements OnModuleInit {
         return;
       }
 
-      this.logger.log(`🤖 Automated Pipeline: Running for topic: ${topic.title}`);
+      this.logger.log(
+        `🤖 Automated Pipeline: Running for topic: ${topic.title}`,
+      );
 
       // 3. Run the full pipeline
       const article: Article = {
-          title: topic.title,
-          description: topic.description,
-          url: topic.url,
+        title: topic.title,
+        description: topic.description,
+        url: topic.url,
       };
 
       const result = await this.pipelineService.runPipeline(article);
       this.lastRunTime = new Date();
       this.lastError = null;
-      this.logger.log(`✅ Automated Pipeline Finished: ${result.type}, Title: ${result.title}`);
-      
-      if (result.type === 'video' && result.localPath) {
-          this.logger.log(`🚀 Automated Upload should be complete for: ${result.title}`);
-      } else if (result.type === 'article') {
-          this.logger.warn(`⚠️ Pipeline fell back to Article mode. No video was generated/uploaded.`);
+      this.logger.log(
+        `✅ Automated Pipeline Finished: ${result.type}, Title: ${result.title}`,
+      );
+
+      if (result.type === "video" && result.localPath) {
+        this.logger.log(
+          `🚀 Automated Upload should be complete for: ${result.title}`,
+        );
+      } else if (result.type === "article") {
+        this.logger.warn(
+          `⚠️ Pipeline fell back to Article mode. No video was generated/uploaded.`,
+        );
       }
 
       // Mark topic as used
@@ -257,7 +286,7 @@ export class SchedulerService implements OnModuleInit {
       this.logger.error("Hourly generation failed", error);
       await this.notificationsService.sendErrorAlert(
         "Hourly video generation failed",
-        error.message
+        error.message,
       );
     }
   }
@@ -290,15 +319,19 @@ export class SchedulerService implements OnModuleInit {
     }
 
     this.logger.log(`🤖 Manual trigger: Running pipeline for ${topic.title}`);
-    
+
     const article: Article = {
-        title: topic.title,
-        description: topic.description,
-        url: topic.url,
+      title: topic.title,
+      description: topic.description,
+      url: topic.url,
     };
 
     const result = await this.pipelineService.runPipeline(article);
-    return { message: "Video generation complete", type: result.type, videoUrl: result.url };
+    return {
+      message: "Video generation complete",
+      type: result.type,
+      videoUrl: result.url,
+    };
   }
 
   /**
@@ -336,29 +369,38 @@ export class SchedulerService implements OnModuleInit {
     // Priority 1: Environment Variables
     const envAutoGen = this.config.get<string>("ENABLE_AUTO_GENERATION");
     if (envAutoGen !== undefined) {
-        this.isAutoGenerationEnabled = envAutoGen === "true";
+      this.isAutoGenerationEnabled = envAutoGen === "true";
     }
 
     const envManualApprove = this.config.get<string>("REQUIRE_MANUAL_APPROVAL");
     if (envManualApprove !== undefined) {
-        this.requiresManualApproval = envManualApprove === "true";
+      this.requiresManualApproval = envManualApprove === "true";
     }
 
     // Priority 2: JSON Settings (only if not already set by ENV)
     try {
       if (fs.existsSync(this.settingsPath)) {
         const data = JSON.parse(fs.readFileSync(this.settingsPath, "utf8"));
-        
-        if (envAutoGen === undefined && data.enableAutoGeneration !== undefined) {
+
+        if (
+          envAutoGen === undefined &&
+          data.enableAutoGeneration !== undefined
+        ) {
           this.isAutoGenerationEnabled = data.enableAutoGeneration;
         }
 
-        if (envManualApprove === undefined && data.requireManualApproval !== undefined) {
+        if (
+          envManualApprove === undefined &&
+          data.requireManualApproval !== undefined
+        ) {
           this.requiresManualApproval = data.requireManualApproval;
         }
       }
     } catch (e) {
-      this.logger.error("Failed to load settings.json (continuing with existing)", e);
+      this.logger.error(
+        "Failed to load settings.json (continuing with existing)",
+        e,
+      );
     }
   }
 
@@ -399,9 +441,11 @@ export class SchedulerService implements OnModuleInit {
 
   onModuleInit() {
     this.loadSettings();
-    this.logger.log(`🚀 [Scheduler] Initialized. Auto-generation: ${this.isAutoGenerationEnabled ? 'ENABLED' : 'DISABLED'}`);
+    this.logger.log(
+      `🚀 [Scheduler] Initialized. Auto-generation: ${this.isAutoGenerationEnabled ? "ENABLED" : "DISABLED"}`,
+    );
     if (this.isAutoGenerationEnabled) {
-        this.logger.log("🎬 [Scheduler] Hourly generation job is active.");
+      this.logger.log("🎬 [Scheduler] Hourly generation job is active.");
     }
   }
 

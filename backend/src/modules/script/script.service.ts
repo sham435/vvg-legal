@@ -24,7 +24,7 @@ export class ScriptService {
     try {
       const script = await this.aiService.generateScript(topic);
       // Construct a string format script from the VideoScript object
-      const fullScript = `${script.hook}\n\n${script.scenes.map(s => s.narration).join(" ")}\n\n${script.hashtags.join(" ")}`;
+      const fullScript = `${script.hook}\n\n${script.scenes.map((s) => s.narration).join(" ")}\n\n${script.hashtags.join(" ")}`;
       return fullScript;
     } catch (error) {
       this.logger.warn(
@@ -44,11 +44,17 @@ export class ScriptService {
   async generateCinematicScriptFromArticle(article: Article): Promise<any> {
     const topic = article.title;
     try {
-      return await this.aiService.generateCinematicScript(topic, article.description);
+      return await this.aiService.generateCinematicScript(
+        topic,
+        article.description,
+      );
     } catch (error) {
       this.logger.error("Failed to generate cinematic script", error);
       // Fallback to basic generateScript format but wrapped in object
-      const basicScript = await this.aiService.generateScript(topic, article.description);
+      const basicScript = await this.aiService.generateScript(
+        topic,
+        article.description,
+      );
       return basicScript;
     }
   }

@@ -8,6 +8,9 @@ import { VideoModule } from "../video/video.module";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { PipelineModule } from "../pipeline/pipeline.module";
 import { PublishModule } from "../publish/publish.module";
+import { GeneticModule } from "../../ai/genetic/genetic.module";
+import { IntelligenceModule } from "../../ai/intelligence/intelligence.module";
+import { AutoSchedulerService } from "./auto-scheduler.service";
 
 @Module({
   imports: [
@@ -23,9 +26,11 @@ import { PublishModule } from "../publish/publish.module";
     NotificationsModule,
     PipelineModule,
     PublishModule,
+    GeneticModule,
+    IntelligenceModule,
   ],
   controllers: [SchedulerController],
-  providers: [SchedulerService],
+  providers: [SchedulerService, AutoSchedulerService],
   exports: [SchedulerService],
 })
 export class SchedulerModule {}

@@ -1,0 +1,152 @@
+# Production Deployment Configuration
+# This file provides environment-specific configurations for different deployment targets
+
+# ==========================================
+# Local Development
+# ==========================================
+[local]
+env_file = ".env"
+node_env = "development"
+debug = true
+hot_reload = true
+
+# ==========================================
+# Staging Environment
+# ==========================================
+[staging]
+env_file = ".env.staging"
+node_env = "staging"
+debug = false
+log_level = "info"
+
+[staging.secrets]
+# These should be set in your CI/CD pipeline or secret manager
+required = [
+  "JWT_SECRET",
+  "DATABASE_URL",
+  "REDIS_URL",
+  "NEWS_API_KEY",
+  "OPENAI_API_KEY",
+]
+
+# ==========================================
+# Production Environment
+# ==========================================
+[production]
+env_file = ".env.production"
+node_env = "production"
+debug = false
+log_level = "warn"
+
+[production.security]
+# Enhanced security settings for production
+rate_limit_requests = 100
+rate_limit_window = 3600  # 1 hour
+enable_security_headers = true
+enable_https_redirect = true
+cookie_secure = true
+cookie_http_only = true
+
+[production.secrets]
+# Critical secrets that MUST be configured in production
+required = [
+  "JWT_SECRET",
+  "VVG_JWT_SECRET",
+  "INTERNAL_API_SECRET",
+  "DATABASE_URL",
+  "REDIS_URL",
+  "NEWS_API_KEY",
+  "OPENAI_API_KEY",
+  "YOUTUBE_CLIENT_ID",
+  "YOUTUBE_CLIENT_SECRET",
+  "YOUTUBE_REFRESH_TOKEN",
+]
+
+# Secrets that should be rotated every 90 days
+rotation_schedule = [
+  "JWT_SECRET",
+  "VVG_JWT_SECRET",
+  "INTERNAL_API_SECRET",
+  "API_KEY_SALT",
+]
+
+# ==========================================
+# Docker Deployment
+# ==========================================
+[docker]
+use_secrets = true
+secrets_path = "/run/secrets"
+env_file = ".env.docker"
+
+[docker.secrets_mapping]
+# Map Docker secrets to environment variables
+database_url = "database_url"
+jwt_secret = "jwt_secret"
+redis_url = "redis_url"
+openai_api_key = "openai_api_key"
+
+# ==========================================
+# Railway Deployment (Current Target)
+# ==========================================
+[railway]
+# Railway uses environment variables directly
+# No .env file needed - all vars set in Railway dashboard
+
+[railway.deployment]
+healthcheck_path = "/health"
+restart_policy = "always"
+
+[railway.variables]
+# Variables to set in Railway dashboard
+NODE_ENV = "production"
+PORT = "3000"
+LOG_LEVEL = "info"
+
+# ==========================================
+# AWS Deployment
+# ==========================================
+[aws]
+region = "us-east-1"
+
+[aws.secrets_manager]
+# AWS Secrets Manager configuration
+secret_prefix = "viral-video-generator"
+version_rotation_days = 90
+
+# Secrets to store in AWS Secrets Manager
+managed_secrets = [
+  "JWT_SECRET",
+  "DATABASE_URL",
+  "OPENAI_API_KEY",
+  "YOUTUBE_CREDENTIALS",
+]
+
+[aws.parameter_store]
+# AWS Systems Manager Parameter Store for non-sensitive config
+path = "/viral-video-generator/production"
+
+# ==========================================
+# Google Cloud Deployment
+# ==========================================
+[gcp]
+project_id = "your-project-id"
+region = "us-central1"
+
+[gcp.secret_manager]
+# Google Secret Manager configuration
+secret_prefix = "vvg"
+
+# ==========================================
+# Azure Deployment
+# ==========================================
+[azure]
+resource_group = "viral-video-generator-rg"
+key_vault_name = "vvg-keyvault"
+
+[azure.key_vault]
+# Azure Key Vault secrets
+secrets = [
+  "jwt-secret",
+  "database-url",
+  "openai-api-key",
+]
