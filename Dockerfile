@@ -23,7 +23,7 @@ COPY . .
 RUN npm run build
 
 # Verify build output
-RUN ls -la dist/src/main.js || (echo "❌ Build failed - dist/src/main.js not found" && exit 1)
+RUN ls -la dist/main.js || (echo "❌ Build failed - dist/main.js not found" && exit 1)
 
 # Production stage
 FROM node:20-alpine
@@ -57,4 +57,4 @@ USER nestjs
 EXPOSE 8080
 
 # Start application
-CMD ["node", "dist/src/main.js"]
+CMD ["node", "dist/main.js"]
