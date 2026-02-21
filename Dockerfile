@@ -1,12 +1,9 @@
-FROM node:20-alpine
+FROM node:20
 
 WORKDIR /app
 
 RUN echo "=== Starting build ===" && \
     ls -la
-
-# Install libssl1.1 for Prisma
-RUN apk add --no-cache libssl1.1 || apk add --no-cache libssl3
 
 COPY package*.json ./
 RUN echo "=== After copying package.json ===" && \
