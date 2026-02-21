@@ -8,7 +8,6 @@ import { VideoModule } from "../video/video.module";
 import { MusicModule } from "../music/music.module";
 import { PublishModule } from "../publish/publish.module";
 import { AiModule } from "../ai/ai.module";
-import { SystemModule } from "../system/system.module";
 import { PipelineCoordinatorService } from "./pipeline-coordinator.service";
 
 @Module({
@@ -20,7 +19,6 @@ import { PipelineCoordinatorService } from "./pipeline-coordinator.service";
     MusicModule,
     PublishModule,
     AiModule,
-    SystemModule,
   ],
   controllers: [PipelineController],
   providers: [PipelineService, PipelineCoordinatorService],
