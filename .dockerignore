@@ -1,5 +1,7 @@
 node_modules/
 dist/
+src/
+prisma/
 *.log
 uploads/
 outputs/
@@ -8,7 +10,7 @@ outputs/
 legal/
 frontend/
 apps/
+node_modules/
 load-tests/
 logs/
 *.md
-.env
