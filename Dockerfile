@@ -13,4 +13,4 @@ RUN npm run build
 
 EXPOSE 8080
 
-CMD ["node", "dist/main.js"]
+CMD ["sh", "-c", "ls -la dist/ && node dist/main.js"]
