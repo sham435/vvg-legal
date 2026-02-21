@@ -24,6 +24,6 @@ RUN npm run build && \
     echo "=== After npm run build ===" && \
     ls -la dist/
 
-EXPOSE 8080
+EXPOSE 3000
 
 CMD ["sh", "-c", "echo '=== Runtime ===' && ls -la && ls -la dist/ && node dist/main.js"]
