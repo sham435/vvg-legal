@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional, Logger } from "@nestjs/common";
 import { SchedulerService } from "../scheduler/scheduler.service";
 import { AiService } from "../ai/ai.service";
 import axios from "axios";
@@ -7,6 +7,7 @@ import * as path from "path";
 
 @Injectable()
 export class SystemService {
+  private readonly logger = new Logger(SystemService.name);
   private readonly settingsPath = path.resolve(
     __dirname,
     "../../../../outputs/settings.json",
@@ -21,7 +22,7 @@ export class SystemService {
   };
 
   constructor(
-    private schedulerService: SchedulerService, // Injected to control scheduler
+    @Optional() private schedulerService: SchedulerService,
     private aiService: AiService,
   ) {}
 
@@ -65,9 +66,8 @@ export class SystemService {
 
     // 2. Fetch Internal Service Status
     // Update scheduler status based on service state
-    this.serviceStates.scheduler = this.schedulerService.isCronActive()
-      ? "running"
-      : "stopped";
+    this.serviceStates.scheduler =
+      this.schedulerService?.isCronActive() ?? false ? "running" : "stopped";
 
     const internalServices = [
       {
@@ -119,6 +119,9 @@ export class SystemService {
 
     // Handle Internal Services
     if (target === "SchedulerService") {
+      if (!this.schedulerService) {
+        return { success: false, message: "SchedulerService not available" };
+      }
       if (action === "stop") {
         this.schedulerService.stopCron();
         return { success: true, message: "Scheduler stopped" };
@@ -138,6 +141,9 @@ export class SystemService {
   }
 
   async controlAll(action: "start" | "stop" | "restart") {
+    if (!this.schedulerService) {
+      return { success: false, message: "SchedulerService not available" };
+    }
     if (action === "start") {
       this.schedulerService.startCron();
       return { success: true, message: "All services started" };

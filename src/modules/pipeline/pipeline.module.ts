@@ -9,6 +9,7 @@ import { MusicModule } from "../music/music.module";
 import { PublishModule } from "../publish/publish.module";
 import { AiModule } from "../ai/ai.module";
 import { PipelineCoordinatorService } from "./pipeline-coordinator.service";
+import { VideoMetricsService } from "../../monitoring/video-metrics.service";
 
 @Module({
   imports: [
@@ -21,7 +22,7 @@ import { PipelineCoordinatorService } from "./pipeline-coordinator.service";
     AiModule,
   ],
   controllers: [PipelineController],
-  providers: [PipelineService, PipelineCoordinatorService],
+  providers: [PipelineService, PipelineCoordinatorService, VideoMetricsService],
   exports: [PipelineService, PipelineCoordinatorService],
 })
 export class PipelineModule {}
