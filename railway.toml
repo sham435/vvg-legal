@@ -1,0 +1,9 @@
+[build]
+builder = "NIXPACKS"
+
+[build.args]
+APP_DIR = "backend"
+
+[deploy]
+startCommand = "cd backend && npm run start:prod"
+healthcheckPath = "/health"
