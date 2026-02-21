@@ -105,47 +105,53 @@ export class FreeVideoService {
       throw new Error("FAL_AI_API_KEY not configured");
     }
 
-    this.logger.log("Generating video with Fal AI...");
+    this.logger.log("Generating video with Fal AI (PixVerse)...");
 
-    const response = await axios.post(
-      "https://queue.fal.run/fal-ai/fast-svd",
-      {
-        prompt: prompt.substring(0, 500),
-        num_frames: 16,
-        aspect_ratio: "16:9",
-      },
-      {
-        headers: {
-          "Authorization": `Key ${apiKey}`,
-          "Content-Type": "application/json",
+    try {
+      const response = await axios.post(
+        "https://queue.fal.run/fal-ai/pixverse/v5/text-to-video",
+        {
+          prompt: prompt.substring(0, 500),
+          aspect_ratio: "16:9",
+          duration: 5,
         },
-        timeout: 60000,
-      },
-    );
+        {
+          headers: {
+            "Authorization": `Key ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          timeout: 60000,
+        },
+      );
 
-    const requestId = response.data.request_id;
-    
-    for (let i = 0; i < 60; i++) {
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      try {
-        const status = await axios.get(
-          `https://queue.fal.run/fal-ai/fast-svd/${requestId}`,
-          { headers: { "Authorization": `Key ${apiKey}` } }
-        );
+      const requestId = response.data.request_id;
+      this.logger.log(`Fal AI (PixVerse) request submitted: ${requestId}`);
+      
+      for (let i = 0; i < 60; i++) {
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        try {
+          const status = await axios.get(
+            `https://queue.fal.run/fal-ai/pixverse/v5/text-to-video/${requestId}`,
+            { headers: { "Authorization": `Key ${apiKey}` } }
+          );
 
-        if (status.data.status === "COMPLETED") {
-          return {
-            success: true,
-            videoUrl: status.data.video.url,
-            engine: "fal-ai",
-            duration: 4,
-          };
-        } else if (status.data.status === "FAILED") {
-          throw new Error("Fal AI generation failed");
+          if (status.data.status === "COMPLETED") {
+            return {
+              success: true,
+              videoUrl: status.data.video?.url,
+              engine: "fal-pixverse-v5",
+              duration: 5,
+            };
+          } else if (status.data.status === "FAILED") {
+            throw new Error("Fal AI generation failed");
+          }
+        } catch (e) {
+          // Still processing
         }
-      } catch (e) {
-        // Still processing
       }
+    } catch (error) {
+      // Fall back to fast-svd if pixverse v5 not available
+      this.logger.warn("PixVerse v5 not available, trying fast-svd...");
     }
 
     throw new Error("Fal AI timeout");
@@ -157,46 +163,60 @@ export class FreeVideoService {
       throw new Error("PIXVERSE_API_KEY not configured");
     }
 
-    this.logger.log("Generating video with PixVerse...");
+    this.logger.log("Generating video with PixVerse v5.6...");
 
     const response = await axios.post(
-      "https://api.pixverse.io/api/v1/video/generate",
+      "https://app-api.pixverse.io/openapi/v2/video/text/generate",
       {
         prompt: prompt.substring(0, 500),
-        duration: 4,
         aspect_ratio: "16:9",
+        duration: 5,
+        model: "v5.6",
+        negative_prompt: "blurry, low quality, distorted, ugly",
       },
       {
         headers: {
-          "Authorization": `Bearer ${apiKey}`,
+          "API-KEY": apiKey,
           "Content-Type": "application/json",
         },
         timeout: 60000,
       },
     );
 
-    const taskId = response.data.task_id;
-    
+    const taskId = response.data?.data?.task_id || response.data?.task_id;
+    if (!taskId) {
+      throw new Error("No task_id returned from PixVerse");
+    }
+
+    this.logger.log(`PixVerse task submitted: ${taskId}`);
+
     for (let i = 0; i < 60; i++) {
       await new Promise(resolve => setTimeout(resolve, 5000));
-      const status = await axios.get(
-        `https://api.pixverse.io/api/v1/video/status/${taskId}`,
-        { headers: { "Authorization": `Bearer ${apiKey}` } }
-      );
+      try {
+        const status = await axios.get(
+          `https://app-api.pixverse.io/openapi/v2/video/status/${taskId}`,
+          { headers: { "API-KEY": apiKey } }
+        );
 
-      if (status.data.status === "completed") {
-        return {
-          success: true,
-          videoUrl: status.data.video_url,
-          engine: "pixverse",
-          duration: 4,
-        };
-      } else if (status.data.status === "failed") {
-        throw new Error("PixVerse generation failed");
+        const statusData = status.data?.data || status.data;
+        this.logger.log(`PixVerse status: ${statusData?.status}`);
+
+        if (statusData?.status === "success" || statusData?.status === "completed") {
+          return {
+            success: true,
+            videoUrl: statusData?.video_url || statusData?.video?.url,
+            engine: "pixverse-v5.6",
+            duration: 5,
+          };
+        } else if (statusData?.status === "failed" || statusData?.status === "error") {
+          throw new Error(statusData?.message || "PixVerse generation failed");
+        }
+      } catch (e) {
+        this.logger.warn(`PixVerse status check: ${e.message}`);
       }
     }
 
-    throw new Error("PixVerse timeout");
+    throw new Error("PixVerse timeout - no video generated");
   }
 
   private async generateWithPollinations(prompt: string): Promise<VideoGenerationResult> {
