@@ -7,3 +7,7 @@ APP_DIR = "backend"
 [deploy]
 startCommand = "cd backend && npm run start:prod"
 healthcheckPath = "/health"
+healthcheckTimeout = 30
+
+[deploy.variables]
+PORT = "3000"
