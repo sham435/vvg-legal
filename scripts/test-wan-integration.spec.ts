@@ -1,8 +1,8 @@
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { VideoService } from '../backend/src/modules/video/video.service';
-import { AiService } from '../backend/src/modules/ai/ai.service';
+import { VideoService } from '../src/modules/video/video.service';
+import { AiService } from '../src/modules/ai/ai.service';
 import axios from 'axios';
 
 jest.mock('axios');

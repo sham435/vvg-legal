@@ -1,6 +1,6 @@
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from '../backend/src/app.module.ts';
-import { EvolutionEngine } from '../backend/src/ai/genetic/evolution-engine.ts';
+import { AppModule } from '../src/app.module.ts';
+import { EvolutionEngine } from '../src/ai/genetic/evolution-engine.ts';
 
 async function bootstrap() {
   const app = await NestFactory.createApplicationContext(AppModule);
