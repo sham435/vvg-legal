@@ -39,13 +39,6 @@ export class IntelligentRouter {
     // Text & Script Generation
     this.providers.set("script", [
       {
-        name: "qwen/qwen-deep-research:free",
-        type: "cloud",
-        costPerUnit: 0,
-        qualityScore: 0.98,
-        latency: 5000,
-      }, // User Rec: Deep Web Analysis
-      {
         name: "google/gemma-3-12b-it:free",
         type: "cloud",
         costPerUnit: 0,
@@ -60,18 +53,18 @@ export class IntelligentRouter {
         latency: 400,
       },
       {
-        name: "google/gemma-3-27b-it:free",
-        type: "cloud",
-        costPerUnit: 0,
-        qualityScore: 0.92,
-        latency: 2000,
-      },
-      {
         name: "google/gemini-2.0-flash-exp:free",
         type: "cloud",
         costPerUnit: 0,
         qualityScore: 0.94,
         latency: 1000,
+      },
+      {
+        name: "qwen/qwen-2.5-7b-instruct:free",
+        type: "cloud",
+        costPerUnit: 0,
+        qualityScore: 0.88,
+        latency: 1200,
       },
       {
         name: "nvidia/nemotron-nano-12b-vl:free",
@@ -84,13 +77,6 @@ export class IntelligentRouter {
 
     // Vision & Multimodal Analysis
     this.providers.set("vision", [
-      {
-        name: "qwen/qwen-deep-research:free",
-        type: "cloud",
-        costPerUnit: 0,
-        qualityScore: 0.98,
-        latency: 5000,
-      }, // Strong Multimodal
       {
         name: "google/gemma-3-12b-it:free",
         type: "cloud",
