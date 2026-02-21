@@ -1,7 +1,6 @@
 node_modules/
 dist/
 src/
-prisma/
 *.log
 uploads/
 outputs/
