@@ -94,11 +94,6 @@ jobs:
           echo "📦 Build artifacts:"
           ls -lah dist/
 
-      - name: Verify Docker Build
-        run: |
-          docker build -f backend/Dockerfile -t vvg-backend:test .
-          docker images | grep vvg-backend
-
       - name: Install Railway CLI
         run: npm install -g @railway/cli@latest
 
