@@ -4,6 +4,7 @@ import { AiService } from "../ai/ai.service";
 import { EngagementPredictor } from "../../ai/intelligence/engagement-predictor";
 import { FreeVideoService } from "./free-video.service";
 import { StabilityAiService } from "../StabilityAI/stability-ai.service";
+import { Sora2Service } from "./engines/sora2.service";
 import axios from "axios";
 import * as fs from "fs";
 import * as path from "path";
@@ -30,6 +31,7 @@ export class VideoService {
     private readonly aiService: AiService,
     private readonly freeVideoService: FreeVideoService,
     private readonly stabilityAiService: StabilityAiService,
+    private readonly sora2Service: Sora2Service,
     private readonly engagementPredictor?: EngagementPredictor,
   ) {
     this.videoDbPath = path.join(
@@ -205,7 +207,7 @@ export class VideoService {
     const priority = this.config
       .get<string>(
         "VIDEO_ENGINE_PRIORITY",
-        "pixverse,wan-1.3b,ltx-video,pollinations,free-slideshow",
+        "sora2,pixverse,wan-1.3b,ltx-video,pollinations,free-slideshow",
       )
       .split(",")
       .map((e) => e.trim());
@@ -265,6 +267,9 @@ export class VideoService {
           case "pixverse":
           case "pixverse-v5.6":
             result = await this.freeVideoService.generateWithPixVerse(finalPrompt);
+            break;
+          case "sora2":
+            result = await this.sora2Service.generateVideo({ prompt: finalPrompt, duration });
             break;
           case "fal-pixverse-v5":
             result = await this.freeVideoService.generateWithFalAI(finalPrompt);
