@@ -114,8 +114,8 @@ export class Sora2Service {
 
       return response.data;
     } catch (error) {
-      const errorMsg = error.response?.data?.error || error.message;
-      this.logger.error(`Failed to submit Sora 2 job: ${errorMsg}`);
+      const errorMsg = error.response?.data?.error || error.response?.data?.message || error.message;
+      this.logger.error(`Failed to submit Sora 2 job: ${JSON.stringify(error.response?.data || errorMsg)}`);
       throw new Error(`Sora 2 API submission failed: ${errorMsg}`);
     }
   }
