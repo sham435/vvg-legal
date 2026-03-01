@@ -9,9 +9,9 @@ export class FalService {
   private readonly apiUrl = "https://queue.fal.run/fal-ai/fast-svd";
 
   constructor(private readonly configService: ConfigService) {
-    this.apiKey = this.configService.get<string>("FAL_KEY");
+    this.apiKey = this.configService.get<string>("FAL_AI_API_KEY");
     if (!this.apiKey) {
-      this.logger.warn("FAL_KEY not configured - Fal.ai will not work");
+      this.logger.warn("FAL_AI_API_KEY not configured - Fal.ai will not work");
     } else {
       this.logger.log("Fal.ai service initialized");
     }
