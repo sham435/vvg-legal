@@ -6,7 +6,6 @@ import axios from "axios";
 export class FalService {
   private readonly logger = new Logger(FalService.name);
   private readonly apiKey: string;
-  private readonly apiUrl = "https://queue.fal.run/fal-ai/fast-svd";
 
   constructor(private readonly configService: ConfigService) {
     this.apiKey = this.configService.get<string>("FAL_AI_API_KEY");
@@ -24,13 +23,12 @@ export class FalService {
       const payload = {
         prompt: prompt.substring(0, 500),
         negative_prompt: "blurry, low quality, distorted, ugly, bad anatomy",
-        num_frames: 25,
-        fps: 6,
-        motion_bucket_id: 127,
+        num_frames: 16,
+        fps: 8,
       };
 
       const response = await axios.post(
-        this.apiUrl,
+        "https://queue.fal.run/fal-ai/animatediff",
         payload,
         {
           headers: {
@@ -43,27 +41,42 @@ export class FalService {
 
       this.logger.log(`Fal.ai response: ${JSON.stringify(response.data)}`);
 
-      if (response.data && response.data.video) {
-        return {
-          success: true,
-          videoUrl: response.data.video.url,
-          thumbnailUrl: response.data.video.url,
-          engine: "fal-ai",
-          duration: 5,
-        };
+      const requestId = response.data.request_id;
+      
+      if (!requestId) {
+        throw new Error("No request ID returned from Fal.ai");
       }
 
-      if (response.data && response.data.images) {
-        return {
-          success: true,
-          videoUrl: response.data.images[0]?.url,
-          thumbnailUrl: response.data.images[0]?.url,
-          engine: "fal-ai",
-          duration: 5,
-        };
+      this.logger.log(`Fal.ai request ID: ${requestId}, polling for result...`);
+
+      for (let i = 0; i < 30; i++) {
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        
+        const statusResponse = await axios.get(
+          `https://queue.fal.run/fal-ai/animatediff/requests/${requestId}`,
+          {
+            headers: { Authorization: `Key ${this.apiKey}` },
+          }
+        );
+
+        this.logger.log(`Fal.ai status: ${statusResponse.data.status}`);
+
+        if (statusResponse.data.status === "COMPLETED") {
+          return {
+            success: true,
+            videoUrl: statusResponse.data.output?.video?.url,
+            thumbnailUrl: statusResponse.data.output?.images?.[0]?.url,
+            engine: "fal-ai",
+            duration: 5,
+          };
+        }
+
+        if (statusResponse.data.status === "FAILED") {
+          throw new Error("Fal.ai generation failed");
+        }
       }
 
-      throw new Error("No video or image returned from Fal.ai");
+      throw new Error("Fal.ai polling timeout");
     } catch (error) {
       const errorMsg = error.response?.data?.error || error.message;
       this.logger.error(`Fal.ai generation failed: ${errorMsg}`);
