@@ -16,44 +16,62 @@ export class HuggingFaceService {
     }
   }
 
+  private readonly videoModels = [
+    "damo-vilab/modelscope-damo-text-to-video",
+    "stabilityai/stable-video-diffusion",
+    "ali-vilab/text-to-video-ms-1.7b",
+  ];
+
   async generateVideo(prompt: string, options: any = {}): Promise<any> {
     this.logger.log(`Generating video with Hugging Face: ${prompt.substring(0, 50)}...`);
 
-    try {
-      const response = await axios.post(
-        "https://api-inference.huggingface.co/models/ByteDance/AnimateDiff",
-        {
-          inputs: prompt.substring(0, 500),
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.apiKey}`,
-            "Content-Type": "application/json",
+    for (const modelId of this.videoModels) {
+      try {
+        this.logger.log(`Trying model: ${modelId}`);
+        
+        const response = await axios.post(
+          `https://api-inference.huggingface.co/models/${modelId}`,
+          {
+            inputs: prompt.substring(0, 500),
           },
-          responseType: "arraybuffer",
-          timeout: 300000,
+          {
+            headers: {
+              Authorization: `Bearer ${this.apiKey}`,
+              "Content-Type": "application/json",
+            },
+            responseType: "arraybuffer",
+            timeout: 300000,
+          }
+        );
+
+        if (response.data) {
+          const base64 = Buffer.from(response.data).toString("base64");
+          const videoUrl = `data:video/mp4;base64,${base64}`;
+
+          return {
+            success: true,
+            videoUrl: videoUrl,
+            thumbnailUrl: videoUrl,
+            engine: `huggingface-${modelId.split('/')[1]}`,
+            duration: 5,
+          };
         }
-      );
-
-      if (response.data) {
-        const base64 = Buffer.from(response.data).toString("base64");
-        const videoUrl = `data:video/mp4;base64,${base64}`;
-
-        return {
-          success: true,
-          videoUrl: videoUrl,
-          thumbnailUrl: videoUrl,
-          engine: "huggingface-animatediff",
-          duration: 5,
-        };
+      } catch (error) {
+        const errorCode = error.response?.status;
+        const errorMsg = error.response?.data?.error || error.message;
+        this.logger.warn(`Model ${modelId} failed (${errorCode}): ${errorMsg}`);
+        
+        if (errorCode === 410) {
+          continue;
+        }
+        if (errorCode === 429) {
+          this.logger.error("Rate limited - stop trying");
+          break;
+        }
       }
-
-      throw new Error("No video returned from Hugging Face");
-    } catch (error) {
-      const errorMsg = error.response?.data?.error || error.message;
-      this.logger.error(`Hugging Face video generation failed: ${errorMsg}`);
-      throw new Error(`Hugging Face video generation failed: ${errorMsg}`);
     }
+
+    throw new Error("All Hugging Face video models failed");
   }
 
   async analyzeTrendingContent(imageUrl: string): Promise<any> {
