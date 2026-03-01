@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { AiService } from "../ai/ai.service";
 import { EngagementPredictor } from "../../ai/intelligence/engagement-predictor";
 import { FreeVideoService } from "./free-video.service";
+import { StabilityAiService } from "../StabilityAI/stability-ai.service";
 import axios from "axios";
 import * as fs from "fs";
 import * as path from "path";
@@ -28,6 +29,7 @@ export class VideoService {
     private readonly config: ConfigService,
     private readonly aiService: AiService,
     private readonly freeVideoService: FreeVideoService,
+    private readonly stabilityAiService: StabilityAiService,
     private readonly engagementPredictor?: EngagementPredictor,
   ) {
     this.videoDbPath = path.join(
@@ -203,7 +205,7 @@ export class VideoService {
     const priority = this.config
       .get<string>(
         "VIDEO_ENGINE_PRIORITY",
-        "wan-1.3b,ltx-video,hunyuan-video,wan-2.1,silicon-flow",
+        "pixverse,wan-1.3b,ltx-video,hunyuan-video,wan-2.1,silicon-flow",
       )
       .split(",")
       .map((e) => e.trim());
@@ -257,6 +259,16 @@ export class VideoService {
           case "pollinations":
           case "article":
             result = await this.freeVideoService.generateVideoFree(finalPrompt, finalPrompt, "Video");
+            break;
+          case "stability-ai":
+            result = await this.generateWithStabilityAI(finalPrompt, duration);
+            break;
+          case "pixverse":
+          case "pixverse-v5.6":
+            result = await this.freeVideoService.generateWithPixVerse(finalPrompt);
+            break;
+          case "fal-pixverse-v5":
+            result = await this.freeVideoService.generateWithFalAI(finalPrompt);
             break;
           default:
             this.logger.warn(`Unknown engine: ${engine}`);
@@ -596,6 +608,34 @@ export class VideoService {
       };
     } catch (error) {
       this.logger.error("Runway generation failed", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate video using Stability AI (Stable Diffusion 3.5 + image-to-video)
+   */
+  async generateWithStabilityAI(
+    prompt: string,
+    duration: number = 5,
+  ): Promise<VideoGenerationResult> {
+    try {
+      this.logger.log("Generating video with Stability AI...");
+
+      const result = await this.stabilityAiService.generateImageAndConvertToVideo(
+        prompt,
+        { aspectRatio: "16:9" },
+        { steps: 30 },
+      );
+
+      return {
+        videoUrl: result.videoUrl,
+        localPath: result.localPath,
+        duration,
+        engine: "stability-ai",
+      };
+    } catch (error) {
+      this.logger.error("Stability AI generation failed", error);
       throw error;
     }
   }

@@ -1,9 +1,12 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
+import { InjectQueue } from "@nestjs/bullmq";
+import { Queue } from "bullmq";
 import { TrendAnalyzer } from "../../ai/intelligence/trend-analyzer";
 import { EvolutionEngine } from "../../ai/genetic/evolution-engine";
 import { GeneticOptimizationService } from "../../ai/genetic/genetic-optimization.service";
 import { AiService } from "../../modules/ai/ai.service";
+import { TrendsService } from "../trends/trends.service";
 
 @Injectable()
 export class AutoSchedulerService {
@@ -15,6 +18,8 @@ export class AutoSchedulerService {
     private readonly evolutionEngine: EvolutionEngine,
     private readonly geneticOptimizationService: GeneticOptimizationService,
     private readonly aiService: AiService,
+    private readonly trendsService: TrendsService,
+    @InjectQueue("video-generation") private readonly videoGenerationQueue: Queue,
   ) {
     // Use GeneticOptimizationService if available, fallback to EvolutionEngine
     this.useOptimizationService = true; // Can be made configurable
@@ -77,14 +82,32 @@ export class AutoSchedulerService {
         );
       }
 
-      // 5. Hand off to AI Service for Video Generation (Cinematic Pipeline)
-      // Note: We might want to create a queue job here instead of direct call to avoid timeout
-      // For now, we log the success. In a real integration, we'd call this.aiService.generateVideoFromScript(viralScript)
-
+      // 5. Hand off to Video Generation Queue
       this.logger.log("✅ Script Evolved & Ready for Production:");
       this.logger.log(JSON.stringify(viralScript, null, 2));
 
-      // TODO: Queue this script for Video Generation
+      // Find or create the trending topic record
+      let topicId: string | undefined;
+      try {
+        const topics = await this.trendsService.getAllTopics(50, false);
+        const matchedTopic = topics.find(
+          (t) => t.title.toLowerCase() === bestTrend.topic.toLowerCase(),
+        );
+        topicId = matchedTopic?.id;
+      } catch (err) {
+        this.logger.warn("Could not find matching topic ID, proceeding without it");
+      }
+
+      // Queue the video generation job
+      await this.videoGenerationQueue.add("generate-video", {
+        topicId,
+        topic: bestTrend.topic,
+        description: `Trending topic: ${bestTrend.topic}`,
+      });
+
+      this.logger.log(
+        `📤 Video generation job queued for topic: ${bestTrend.topic}`,
+      );
     } catch (error) {
       this.logger.error("Error in Trend Watch job", error);
     }

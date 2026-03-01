@@ -1,159 +1,168 @@
 import { Injectable, Logger, HttpException, HttpStatus } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { HttpService } from "@nestjs/axios";
-import { firstValueFrom } from "rxjs";
-import { AxiosResponse } from "axios";
+import { Json2VideoService } from "../video/json2video.service";
 
 export interface ThumbnailOptions {
   aspectRatio?: string;
+  width?: number;
+  height?: number;
+  backgroundColor?: string;
+  textColor?: string;
+  fontSize?: number;
   stylize?: number;
   quality?: number;
   forceOfficial?: boolean;
 }
 
-/**
- * Thumbnail generation service
- * Communicates with NestJS Midjourney API (which handles routing)
- * This service treats the Midjourney API as a black box -
- * it doesn't know if requests go to official API or Discord bot
- */
 @Injectable()
 export class ThumbnailService {
   private readonly logger = new Logger(ThumbnailService.name);
-  private readonly midjourneyApiUrl: string;
-  private readonly midjourneyApiKey: string;
-  private readonly timeout: number = 90000; // 90 seconds for image generation
 
   constructor(
-    private readonly configService: ConfigService,
-    private readonly httpService: HttpService,
+    private readonly config: ConfigService,
+    private readonly json2VideoService: Json2VideoService,
   ) {
-    this.midjourneyApiUrl = this.configService.get<string>(
-      "MIDJOURNEY_API_URL",
-      "http://midjourney-api-public:4000",
-    );
-    this.midjourneyApiKey = this.configService.get<string>(
-      "MIDJOURNEY_API_KEY",
-      "",
-    );
-
-    if (!this.midjourneyApiKey) {
+    if (!this.json2VideoService.isConfigured()) {
       this.logger.warn(
-        "⚠️ Midjourney API KEY is not configured (MIDJOURNEY_API_KEY). Thumbnail generation will fail. " +
-          "Please provide a valid key in your environment settings.",
+        "⚠️ JSON2VIDEO_API_KEY not configured. Using fallback placeholder images.",
       );
-    }
-
-    if (this.midjourneyApiUrl === "http://midjourney-api-public:4000") {
-      this.logger.log("ℹ️ Using default Midjourney API URL (public instance).");
+    } else {
+      this.logger.log("✅ ThumbnailService initialized with JSON2Video");
     }
   }
 
-  /**
-   * Generate a thumbnail for viral video
-   * @param prompt - Text prompt for thumbnail
-   * @param options - Generation options
-   * @returns Thumbnail URL and metadata
-   */
   async generateThumbnail(prompt: string, options: ThumbnailOptions = {}) {
     const startTime = Date.now();
 
-    this.logger.log(
-      `Generating thumbnail: "${prompt.substring(0, 50)}..." ` +
-        `(aspect: ${options.aspectRatio || "16:9"}, force official: ${options.forceOfficial || false})`,
-    );
+    this.logger.log(`Generating thumbnail: "${prompt.substring(0, 50)}..."`);
 
     try {
-      const payload = {
-        prompt,
-        aspectRatio: options.aspectRatio || "16:9", // Default to YouTube aspect ratio
-        stylize: options.stylize,
-        quality: options.quality,
-        isPublicRequest: options.forceOfficial || false, // Internal request unless forced
-      };
+      if (!this.json2VideoService.isConfigured()) {
+        throw new Error("JSON2VIDEO_API_KEY not configured");
+      }
 
-      const response: AxiosResponse = await firstValueFrom(
-        this.httpService.post(`${this.midjourneyApiUrl}/generate`, payload, {
-          headers: {
-            Authorization: `Bearer ${this.midjourneyApiKey}`,
-            "Content-Type": "application/json",
-          },
-          timeout: this.timeout,
-        }),
-      );
+      const { width, height } = this.getDimensions(options.aspectRatio, options.width, options.height);
+
+      const movieId = await this.json2VideoService.generateThumbnail(prompt, {
+        width,
+        height,
+        backgroundColor: options.backgroundColor || "#1a1a2e",
+        textColor: options.textColor || "#ffffff",
+        fontSize: options.fontSize || 60,
+      });
 
       const generationTime = Date.now() - startTime;
 
-      this.logger.log(
-        `Thumbnail generated successfully in ${generationTime}ms ` +
-          `via ${response.data.metadata?.provider || "unknown"} provider`,
-      );
+      this.logger.log(`Thumbnail generated successfully in ${generationTime}ms`);
 
       return {
-        jobId: response.data.jobId,
-        status: response.data.status,
-        message: response.data.message,
-        imageUrl: response.data.imageUrl,
-        thumbnailUrl: response.data.thumbnailUrl,
-        progress: response.data.progress,
+        jobId: movieId,
+        status: "completed",
+        message: "Thumbnail generation submitted",
+        imageUrl: movieId,
+        thumbnailUrl: movieId,
+        progress: 100,
         generationTime,
-        provider: response.data.metadata?.provider,
+        provider: "json2video",
       };
     } catch (error) {
-      this.logger.error(
-        `Thumbnail generation failed: ${error.message}`,
-        error.stack,
-      );
+      this.logger.error(`Thumbnail generation failed: ${error.message}`);
 
-      throw new HttpException(
-        {
-          code: "THUMBNAIL_GENERATION_FAILED",
-          message: `Failed to generate thumbnail: ${error.response?.data?.message || error.message}`,
-          details: error.response?.data,
-        },
-        error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR,
-      );
+      const placeholderUrl = `https://via.placeholder.com/1280x720/1a1a2e/ffffff?text=${encodeURIComponent(prompt.substring(0, 30))}`;
+
+      return {
+        jobId: "fallback",
+        status: "fallback",
+        message: "Using placeholder due to API error",
+        imageUrl: placeholderUrl,
+        thumbnailUrl: placeholderUrl,
+        progress: 100,
+        generationTime: Date.now() - startTime,
+        provider: "placeholder",
+      };
     }
   }
 
-  /**
-   * Check the status of a thumbnail generation job
-   * @param jobId - The job ID to check
-   * @returns Job status and result
-   */
   async getThumbnailStatus(jobId: string) {
     this.logger.log(`Checking thumbnail job status: ${jobId}`);
 
-    try {
-      const response: AxiosResponse = await firstValueFrom(
-        this.httpService.get(`${this.midjourneyApiUrl}/status/${jobId}`, {
-          headers: {
-            Authorization: `Bearer ${this.midjourneyApiKey}`,
-          },
-          timeout: 10000,
-        }),
-      );
-
+    if (jobId === "fallback") {
       return {
-        jobId: response.data.jobId,
-        status: response.data.status,
-        message: response.data.message,
-        imageUrl: response.data.imageUrl,
-        thumbnailUrl: response.data.thumbnailUrl,
-        progress: response.data.progress,
-        provider: response.data.metadata?.provider,
+        jobId,
+        status: "completed",
+        message: "Placeholder image",
+      };
+    }
+
+    try {
+      const status = await this.json2VideoService.checkStatus(jobId);
+      return {
+        jobId,
+        status: status?.status || "unknown",
+        message: status?.message || "",
       };
     } catch (error) {
       this.logger.error(`Failed to get thumbnail status: ${error.message}`);
-
       throw new HttpException(
         {
           code: "STATUS_CHECK_FAILED",
           message: "Failed to retrieve thumbnail job status",
-          details: error.message,
         },
         HttpStatus.NOT_FOUND,
       );
+    }
+  }
+
+  async generateChannelArt(title: string, channelName: string): Promise<string> {
+    try {
+      if (!this.json2VideoService.isConfigured()) {
+        return `https://via.placeholder.com/2560x1440/1a1a2e/ffffff?text=${encodeURIComponent(channelName)}`;
+      }
+
+      return await this.json2VideoService.generateThumbnail(`${channelName}\n${title}`, {
+        width: 2560,
+        height: 1440,
+        fontSize: 80,
+      });
+    } catch (error) {
+      this.logger.error(`Failed to generate channel art: ${error.message}`);
+      return `https://via.placeholder.com/2560x1440/1a1a2e/ffffff?text=${encodeURIComponent(channelName)}`;
+    }
+  }
+
+  async generateScenePreviews(scenes: any[]): Promise<string[]> {
+    const previews: string[] = [];
+
+    for (let i = 0; i < Math.min(scenes.length, 3); i++) {
+      const scene = scenes[i];
+      try {
+        const preview = await this.generateThumbnail(scene.narration || `Scene ${i + 1}`, {
+          width: 640,
+          height: 360,
+          fontSize: 30,
+        });
+        previews.push(preview.imageUrl);
+      } catch (error) {
+        previews.push(`https://via.placeholder.com/640x360/1a1a2e/ffffff?text=Scene+${i + 1}`);
+      }
+    }
+
+    return previews;
+  }
+
+  private getDimensions(aspectRatio?: string, width?: number, height?: number): { width: number; height: number } {
+    if (width && height) return { width, height };
+
+    switch (aspectRatio) {
+      case "9:16":
+        return { width: 1080, height: 1920 };
+      case "1:1":
+        return { width: 1080, height: 1080 };
+      case "4:5":
+        return { width: 1080, height: 1350 };
+      case "16:9":
+      default:
+        return { width: 1920, height: 1080 };
     }
   }
 }

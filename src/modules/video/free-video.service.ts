@@ -99,7 +99,7 @@ export class FreeVideoService {
     throw new Error("Krea AI timeout");
   }
 
-  private async generateWithFalAI(prompt: string): Promise<VideoGenerationResult> {
+  async generateWithFalAI(prompt: string): Promise<VideoGenerationResult> {
     const apiKey = this.config.get<string>("FAL_AI_API_KEY");
     if (!apiKey) {
       throw new Error("FAL_AI_API_KEY not configured");
@@ -157,7 +157,7 @@ export class FreeVideoService {
     throw new Error("Fal AI timeout");
   }
 
-  private async generateWithPixVerse(prompt: string): Promise<VideoGenerationResult> {
+  async generateWithPixVerse(prompt: string): Promise<VideoGenerationResult> {
     const apiKey = this.config.get<string>("PIXVERSE_API_KEY");
     if (!apiKey) {
       throw new Error("PIXVERSE_API_KEY not configured");

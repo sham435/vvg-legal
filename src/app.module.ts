@@ -28,6 +28,7 @@ import { MusicModule } from "./modules/music/music.module";
 import { PublishModule } from "./modules/publish/publish.module";
 import { VyroModule } from "./modules/vyro/vyro.module";
 import { SystemModule } from "./modules/system/system.module";
+import { StabilityAiModule } from "./modules/StabilityAI/stability-ai.module";
 import { AppController } from "./app.controller";
 import { MarketingModule } from "./modules/marketing/marketing.module";
 import { OrchestratorModule } from "./ai/orchestrator/orchestrator.module";
@@ -136,6 +137,7 @@ import { GeneticModule } from "./ai/genetic/genetic.module";
     PublishModule,
     SystemModule,
     MarketingModule,
+    StabilityAiModule,
   ],
   providers: [
     // Global rate limiting guard

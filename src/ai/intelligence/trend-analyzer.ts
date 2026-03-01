@@ -92,10 +92,10 @@ Return strictly JSON:
 }`;
 
     try {
-      // Use Qwen Deep Research or similar high-reasoning model
+      // Use high-quality reasoning models for trend analysis
       const provider = this.router.selectProvider({
         prompt,
-        contentType: "vision", // HACK: Using 'vision' slot to access Qwen Deep Research if strictly mapped there, or 'script'
+        contentType: "script",
         constraints: { minQuality: "high" },
       });
 

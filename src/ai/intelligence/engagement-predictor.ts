@@ -83,51 +83,66 @@ Return JSON:
   "suggestions": ["Make the hook more shocking", "Cut the middle section"]
 }`;
 
-    try {
-      // Use a reasoning-capable free model (Nemotron or Gemma 3)
-      const provider = this.router.selectProvider({
-        prompt,
-        contentType: "script",
-        constraints: { minQuality: "high" },
-      });
+    const fallbackModels = [
+      "google/gemma-3-12b-it:free",
+      "google/gemma-3-4b-it:free",
+      "mistralai/mistral-7b-instruct:free",
+      "meta-llama/llama-3.1-8b-instruct:free",
+    ];
 
-      const completion = await this.openai.chat.completions.create({
-        model: provider.name,
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.2, // Low temp for consistent analysis
-        response_format: { type: "json_object" },
-      });
+    for (let attempt = 0; attempt < fallbackModels.length; attempt++) {
+      try {
+        const model = fallbackModels[attempt];
+        
+        const completion = await this.openai.chat.completions.create({
+          model,
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.2,
+          response_format: { type: "json_object" },
+        });
 
-      const response = JSON.parse(
-        completion.choices[0].message.content || "{}",
-      );
-      const metrics = response.metrics || {
-        hookStrength: 5,
-        pacingScore: 5,
-        emotionalImpact: 5,
-        trendAlignment: 5,
-      };
+        const response = JSON.parse(
+          completion.choices[0].message.content || "{}",
+        );
+        const metrics = response.metrics || {
+          hookStrength: 5,
+          pacingScore: 5,
+          emotionalImpact: 5,
+          trendAlignment: 5,
+        };
 
-      const totalScore =
-        metrics.hookStrength * 3.0 + // Hook is king
-        metrics.pacingScore * 2.5 +
-        metrics.emotionalImpact * 2.5 +
-        metrics.trendAlignment * 2.0; // Max possible approx 100
+        const totalScore =
+          metrics.hookStrength * 3.0 +
+          metrics.pacingScore * 2.5 +
+          metrics.emotionalImpact * 2.5 +
+          metrics.trendAlignment * 2.0;
 
-      return {
-        totalScore: Math.min(100, Math.round(totalScore)),
-        metrics: {
-          hookStrength: metrics.hookStrength,
-          pacingScore: metrics.pacingScore,
-          emotionalImpact: metrics.emotionalImpact,
-          trendAlignment: metrics.trendAlignment,
-        },
-        suggestions: response.suggestions || [],
-      };
-    } catch (error) {
-      this.logger.error("Failed to predict viral score", error);
-      return this.getMockScore();
+        return {
+          totalScore: Math.min(100, Math.round(totalScore)),
+          metrics: {
+            hookStrength: metrics.hookStrength,
+            pacingScore: metrics.pacingScore,
+            emotionalImpact: metrics.emotionalImpact,
+            trendAlignment: metrics.trendAlignment,
+          },
+          suggestions: response.suggestions || [],
+        };
+      } catch (error: any) {
+        const isRateLimit = error.status === 429 || error.message?.includes("rate limit");
+        this.logger.warn(
+          `Model attempt ${attempt + 1} failed${isRateLimit ? " (rate limited)" : ""}: ${error.message}`,
+        );
+        
+        if (!isRateLimit && attempt === fallbackModels.length - 1) {
+          throw error;
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+      }
     }
+
+    this.logger.error("All models failed, returning mock score");
+    return this.getMockScore();
   }
 
   private getMockScore(): ViralScore {

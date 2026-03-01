@@ -67,10 +67,24 @@ export class IntelligentRouter {
         latency: 1200,
       },
       {
-        name: "nvidia/nemotron-nano-12b-vl:free",
+        name: "nvidia/nemotron-nano-12b-v2-vl:free",
         type: "cloud",
         costPerUnit: 0,
-        qualityScore: 0.88,
+        qualityScore: 0.92,
+        latency: 1500,
+      },
+      {
+        name: "mistralai/mistral-7b-instruct:free",
+        type: "cloud",
+        costPerUnit: 0,
+        qualityScore: 0.85,
+        latency: 1200,
+      },
+      {
+        name: "meta-llama/llama-3.1-8b-instruct:free",
+        type: "cloud",
+        costPerUnit: 0,
+        qualityScore: 0.87,
         latency: 1500,
       },
     ]);
@@ -99,7 +113,7 @@ export class IntelligentRouter {
         latency: 3000,
       },
       {
-        name: "nvidia/nemotron-nano-12b-vl:free",
+        name: "nvidia/nemotron-nano-12b-v2-vl:free",
         type: "cloud",
         costPerUnit: 0,
         qualityScore: 0.94,

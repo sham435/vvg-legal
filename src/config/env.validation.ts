@@ -1,5 +1,6 @@
 import { plainToInstance } from "class-transformer";
 import { IsString, IsNumber, IsOptional, validateSync, IsNotEmpty, MinLength } from "class-validator";
+import { Logger } from "@nestjs/common";
 
 class EnvironmentVariables {
   @IsString()
@@ -46,6 +47,10 @@ class EnvironmentVariables {
   @IsString()
   @IsOptional()
   MIDJOURNEY_API_KEY: string;
+
+  @IsString()
+  @IsOptional()
+  STABILITY_API_KEY: string;
 
   @IsString()
   @IsOptional()
@@ -172,7 +177,8 @@ export function checkRequiredSecrets(): void {
     });
 
     if (hasDefaults.length > 0) {
-      console.warn(
+      const logger = new Logger("EnvValidation");
+      logger.warn(
         `⚠️  WARNING: The following variables appear to have default/example values in production: ${hasDefaults.join(', ')}`
       );
     }

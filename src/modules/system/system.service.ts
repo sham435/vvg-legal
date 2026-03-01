@@ -103,7 +103,7 @@ export class SystemService {
     action: "start" | "stop" | "restart";
   }) {
     const { target, action } = body;
-    console.log(`[SystemControl] ${action.toUpperCase()} ${target}`);
+    this.logger.log(`[SystemControl] ${action.toUpperCase()} ${target}`);
 
     // Handle External Servers (Toggle Settings)
     if (["News API", "Git Repo", "YouTube API", "Meta API"].includes(target)) {
@@ -171,7 +171,7 @@ export class SystemService {
     try {
       return JSON.parse(fs.readFileSync(this.settingsPath, "utf8"));
     } catch (e) {
-      console.error("Failed to parse settings.json", e);
+      this.logger.error("Failed to parse settings.json", e);
       return { services: {} };
     }
   }
@@ -262,7 +262,7 @@ export class SystemService {
         message: `Simulated connection test for ${service} passed (Method not implemented)`,
       };
     } catch (error: any) {
-      console.error(`Test connection failed for ${service}:`, error.message);
+      this.logger.error(`Test connection failed for ${service}:`, error.message);
       return { success: false, message: error.message || "Connection failed" };
     }
   }

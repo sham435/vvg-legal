@@ -1,11 +1,15 @@
 import { Controller, Get, HttpCode, HttpStatus } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import Redis from "ioredis";
 import { Queue } from "bullmq";
 
 @Controller("health")
 export class HealthController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
   @Get()
   @HttpCode(HttpStatus.OK)
@@ -29,6 +33,30 @@ export class HealthController {
       checks,
       version: process.env.npm_package_version || "1.0.0",
       environment: process.env.NODE_ENV,
+    };
+  }
+
+  @Get("config")
+  @HttpCode(HttpStatus.OK)
+  async checkConfig() {
+    const keys = {
+      OPENROUTER_API_KEY: !!this.config.get<string>("OPENROUTER_API_KEY"),
+      PIXVERSE_API_KEY: !!this.config.get<string>("PIXVERSE_API_KEY"),
+      VYRO_API_KEY: !!this.config.get<string>("VYRO_API_KEY"),
+      IMAGINE_TOKEN: !!this.config.get<string>("IMAGINE_TOKEN"),
+      YOUTUBE_CLIENT_ID: !!this.config.get<string>("YOUTUBE_CLIENT_ID"),
+      YOUTUBE_CLIENT_SECRET: !!this.config.get<string>("YOUTUBE_CLIENT_SECRET"),
+      YOUTUBE_REFRESH_TOKEN: !!this.config.get<string>("YOUTUBE_REFRESH_TOKEN"),
+      DATABASE_URL: !!this.config.get<string>("DATABASE_URL"),
+      REDIS_URL: !!this.config.get<string>("REDIS_URL"),
+    };
+
+    return {
+      configured: keys,
+      summary: {
+        total: Object.keys(keys).length,
+        set: Object.values(keys).filter(Boolean).length,
+      },
     };
   }
 

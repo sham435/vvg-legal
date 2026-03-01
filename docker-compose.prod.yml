@@ -10,7 +10,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - DATABASE_URL=postgresql://postgres:password@postgres:5432/vvg_prod
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/vvg_prod?sslmode=require
       - REDIS_URL=redis://redis:6379
       - OPENAI_API_KEY=${OPENAI_API_KEY}
     volumes:
