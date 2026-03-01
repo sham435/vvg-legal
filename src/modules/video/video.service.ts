@@ -6,6 +6,7 @@ import { FreeVideoService } from "./free-video.service";
 import { StabilityAiService } from "../StabilityAI/stability-ai.service";
 import { Sora2Service } from "./engines/sora2.service";
 import { FalService } from "./engines/fal.service";
+import { HuggingFaceService } from "./engines/huggingface.service";
 import axios from "axios";
 import * as fs from "fs";
 import * as path from "path";
@@ -34,6 +35,7 @@ export class VideoService {
     private readonly stabilityAiService: StabilityAiService,
     private readonly sora2Service: Sora2Service,
     private readonly falService: FalService,
+    private readonly huggingFaceService: HuggingFaceService,
     private readonly engagementPredictor?: EngagementPredictor,
   ) {
     this.videoDbPath = path.join(
@@ -209,7 +211,7 @@ export class VideoService {
     const priority = this.config
       .get<string>(
         "VIDEO_ENGINE_PRIORITY",
-        "fal,pixverse,pollinations,wan-1.3b,ltx-video,free-slideshow",
+        "huggingface,pixverse,pollinations,wan-1.3b,ltx-video,free-slideshow",
       )
       .split(",")
       .map((e) => e.trim());
@@ -284,6 +286,9 @@ export class VideoService {
             break;
           case "fal":
             result = await this.falService.generateVideo(finalPrompt);
+            break;
+          case "huggingface":
+            result = await this.huggingFaceService.generateVideo(finalPrompt);
             break;
           default:
             this.logger.warn(`Unknown engine: ${engine}`);
