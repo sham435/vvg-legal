@@ -268,9 +268,15 @@ export class VideoService {
           case "pixverse-v5.6":
             result = await this.freeVideoService.generateWithPixVerse(finalPrompt);
             break;
-          case "sora2":
-            result = await this.sora2Service.generateVideo({ prompt: finalPrompt, duration });
+          case "sora2": {
+            const soraResult = await this.sora2Service.generateVideo({ prompt: finalPrompt, duration });
+            result = {
+              videoUrl: soraResult.videoUrl,
+              engine: "sora2",
+              duration: soraResult.metadata?.duration,
+            };
             break;
+          }
           case "fal-pixverse-v5":
             result = await this.freeVideoService.generateWithFalAI(finalPrompt);
             break;

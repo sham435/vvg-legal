@@ -105,40 +105,15 @@ export class ThumbnailService {
       };
     }
 
-    try {
-      const status = await this.json2VideoService.checkStatus(jobId);
-      return {
-        jobId,
-        status: status?.status || "unknown",
-        message: status?.message || "",
-      };
-    } catch (error) {
-      this.logger.error(`Failed to get thumbnail status: ${error.message}`);
-      throw new HttpException(
-        {
-          code: "STATUS_CHECK_FAILED",
-          message: "Failed to retrieve thumbnail job status",
-        },
-        HttpStatus.NOT_FOUND,
-      );
-    }
+    return {
+      jobId,
+      status: "unknown",
+      message: "JSON2Video not configured, using placeholder",
+    };
   }
 
   async generateChannelArt(title: string, channelName: string): Promise<string> {
-    try {
-      if (!this.json2VideoService.isConfigured()) {
-        return `https://via.placeholder.com/2560x1440/1a1a2e/ffffff?text=${encodeURIComponent(channelName)}`;
-      }
-
-      return await this.json2VideoService.generateThumbnail(`${channelName}\n${title}`, {
-        width: 2560,
-        height: 1440,
-        fontSize: 80,
-      });
-    } catch (error) {
-      this.logger.error(`Failed to generate channel art: ${error.message}`);
-      return `https://via.placeholder.com/2560x1440/1a1a2e/ffffff?text=${encodeURIComponent(channelName)}`;
-    }
+    return `https://via.placeholder.com/2560x1440/1a1a2e/ffffff?text=${encodeURIComponent(channelName)}`;
   }
 
   async generateScenePreviews(scenes: any[]): Promise<string[]> {
