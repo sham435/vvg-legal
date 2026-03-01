@@ -1,9 +1,11 @@
 import { Controller, Post, Get, Body, Query } from "@nestjs/common";
 import { ApiTags, ApiOperation, ApiProperty } from "@nestjs/swagger";
+import { IsString, IsOptional, IsNumber, IsBoolean } from "class-validator";
 import { VideoService } from "./video.service";
 
 class GenerateVideoDto {
   @ApiProperty({ description: "Video generation prompt" })
+  @IsString()
   prompt: string;
 
   @ApiProperty({
@@ -11,12 +13,16 @@ class GenerateVideoDto {
     required: false,
     default: 5,
   })
+  @IsOptional()
+  @IsNumber()
   duration?: number;
 
   @ApiProperty({
     description: "Topic for pre-generation scoring (optional)",
     required: false,
   })
+  @IsOptional()
+  @IsString()
   topic?: string;
 
   @ApiProperty({
@@ -24,6 +30,8 @@ class GenerateVideoDto {
     required: false,
     default: false,
   })
+  @IsOptional()
+  @IsBoolean()
   skipScoring?: boolean;
 }
 
