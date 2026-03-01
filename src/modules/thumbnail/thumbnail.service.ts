@@ -1,6 +1,5 @@
 import { Injectable, Logger, HttpException, HttpStatus } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { Json2VideoService } from "../video/json2video.service";
 
 export interface ThumbnailOptions {
   aspectRatio?: string;
@@ -17,12 +16,13 @@ export interface ThumbnailOptions {
 @Injectable()
 export class ThumbnailService {
   private readonly logger = new Logger(ThumbnailService.name);
+  private readonly json2VideoApiKey: string;
 
   constructor(
     private readonly config: ConfigService,
-    private readonly json2VideoService: Json2VideoService,
   ) {
-    if (!this.json2VideoService.isConfigured()) {
+    this.json2VideoApiKey = this.config.get<string>("JSON2VIDEO_API_KEY");
+    if (!this.json2VideoApiKey) {
       this.logger.warn(
         "⚠️ JSON2VIDEO_API_KEY not configured. Using fallback placeholder images.",
       );
@@ -31,25 +31,36 @@ export class ThumbnailService {
     }
   }
 
+  isConfigured(): boolean {
+    return !!this.json2VideoApiKey;
+  }
+
   async generateThumbnail(prompt: string, options: ThumbnailOptions = {}) {
     const startTime = Date.now();
 
     this.logger.log(`Generating thumbnail: "${prompt.substring(0, 50)}..."`);
 
     try {
-      if (!this.json2VideoService.isConfigured()) {
+      if (!this.isConfigured()) {
         throw new Error("JSON2VIDEO_API_KEY not configured");
       }
 
+      const axios = require("axios");
       const { width, height } = this.getDimensions(options.aspectRatio, options.width, options.height);
-
-      const movieId = await this.json2VideoService.generateThumbnail(prompt, {
-        width,
-        height,
-        backgroundColor: options.backgroundColor || "#1a1a2e",
-        textColor: options.textColor || "#ffffff",
-        fontSize: options.fontSize || 60,
-      });
+      
+      const response = await axios.post(
+        "https://api.json2video.com/v2/movies",
+        {
+          prompt,
+          width,
+          height,
+          callback: `${this.config.get<string>("WEBHOOK_BASE_URL")}/api/v1/video/webhook/json2video`,
+        },
+        { headers: { "x-api-key": this.json2VideoApiKey } }
+      );
+      
+      const movieId = response.data?.movie_id;
+      if (!movieId) throw new Error("No movie ID returned");
 
       const generationTime = Date.now() - startTime;
 

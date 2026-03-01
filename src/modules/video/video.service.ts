@@ -205,7 +205,7 @@ export class VideoService {
     const priority = this.config
       .get<string>(
         "VIDEO_ENGINE_PRIORITY",
-        "pixverse,wan-1.3b,ltx-video,hunyuan-video,wan-2.1,silicon-flow",
+        "pixverse,wan-1.3b,ltx-video,pollinations,free-slideshow",
       )
       .split(",")
       .map((e) => e.trim());
@@ -240,11 +240,10 @@ export class VideoService {
             result = await this.generateWithNvidiaCosmos(finalPrompt, duration);
             break;
           case "veo":
-            result = await this.generateWithVeo(finalPrompt, duration);
-            break;
           case "cogvideox":
-            result = await this.generateWithCogVideoX(finalPrompt, duration);
-            break;
+          case "json2video":
+            this.logger.warn(`Engine ${engine} is disabled (not working)`);
+            throw new Error(`Engine ${engine} is disabled`);
           case "svd":
             result = await this.generateWithSVD(finalPrompt, duration);
             break;
