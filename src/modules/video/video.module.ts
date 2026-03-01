@@ -5,6 +5,7 @@ import { VideoService } from "./video.service";
 import { FreeVideoService } from "./free-video.service";
 import { PixverseEngine } from "./engines/pixverse.engine";
 import { Sora2Service } from "./engines/sora2.service";
+import { FalService } from "./engines/fal.service";
 import { VideoWebhookController } from "./webhook.controller";
 import { AiModule } from "../ai/ai.module";
 import { VyroModule } from "../vyro/vyro.module";
@@ -14,7 +15,7 @@ import { StabilityAiModule } from "../StabilityAI/stability-ai.module";
 @Module({
   imports: [HttpModule, AiModule, VyroModule, IntelligenceModule, StabilityAiModule],
   controllers: [VideoController, VideoWebhookController],
-  providers: [VideoService, FreeVideoService, PixverseEngine, Sora2Service],
-  exports: [VideoService, PixverseEngine, Sora2Service],
+  providers: [VideoService, FreeVideoService, PixverseEngine, Sora2Service, FalService],
+  exports: [VideoService, PixverseEngine, Sora2Service, FalService],
 })
 export class VideoModule {}

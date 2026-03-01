@@ -5,6 +5,7 @@ import { EngagementPredictor } from "../../ai/intelligence/engagement-predictor"
 import { FreeVideoService } from "./free-video.service";
 import { StabilityAiService } from "../StabilityAI/stability-ai.service";
 import { Sora2Service } from "./engines/sora2.service";
+import { FalService } from "./engines/fal.service";
 import axios from "axios";
 import * as fs from "fs";
 import * as path from "path";
@@ -32,6 +33,7 @@ export class VideoService {
     private readonly freeVideoService: FreeVideoService,
     private readonly stabilityAiService: StabilityAiService,
     private readonly sora2Service: Sora2Service,
+    private readonly falService: FalService,
     private readonly engagementPredictor?: EngagementPredictor,
   ) {
     this.videoDbPath = path.join(
@@ -207,7 +209,7 @@ export class VideoService {
     const priority = this.config
       .get<string>(
         "VIDEO_ENGINE_PRIORITY",
-        "sora2,pixverse,wan-1.3b,ltx-video,pollinations,free-slideshow",
+        "fal,pixverse,pollinations,wan-1.3b,ltx-video,free-slideshow",
       )
       .split(",")
       .map((e) => e.trim());
@@ -279,6 +281,9 @@ export class VideoService {
           }
           case "fal-pixverse-v5":
             result = await this.freeVideoService.generateWithFalAI(finalPrompt);
+            break;
+          case "fal":
+            result = await this.falService.generateVideo(finalPrompt);
             break;
           default:
             this.logger.warn(`Unknown engine: ${engine}`);
